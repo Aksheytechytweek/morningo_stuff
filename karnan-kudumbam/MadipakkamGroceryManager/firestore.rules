@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Access through the authenticated backend only for this first version.
+    // The Admin SDK used by the server is not constrained by these client rules.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,22 @@
+name: Karnan Kudumbam Daily Email Report
+on:
+  schedule:
+    # 20:00 Asia/Kolkata = 14:30 UTC. GitHub may delay scheduled workflows.
+    - cron: '30 14 * * *'
+  workflow_dispatch:
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger secure report job
+        env:
+          REPORT_JOB_URL: ${{ secrets.REPORT_JOB_URL }}
+          DAILY_JOB_SECRET: ${{ secrets.DAILY_JOB_SECRET }}
+        run: |
+          test -n "$REPORT_JOB_URL"
+          test -n "$DAILY_JOB_SECRET"
+          curl --fail-with-body --silent --show-error \
+            -X POST "$REPORT_JOB_URL" \
+            -H "x-job-secret: $DAILY_JOB_SECRET" \
+            -H "content-type: application/json" \
+            --data '{}'
