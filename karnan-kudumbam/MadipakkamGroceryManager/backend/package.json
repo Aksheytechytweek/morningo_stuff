@@ -1,0 +1,19 @@
+{
+  "name": "karnan-kudumbam-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "resend": "^4.0.1",
+    "express": "^4.21.2",
+    "firebase-admin": "^13.0.2",
+    "helmet": "^8.0.0",
+    "express-rate-limit": "^7.5.0",
+    "pdfkit": "^0.16.0"
+  }
+}
