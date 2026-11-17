@@ -106,7 +106,7 @@ export function normaliseSearchResults(payload, requestLine) {
       stock,
       checkedAt,
       pincode: pin,
-      locationSpecific: retailer?.id === 'bigbasket' ? false : pin === String(requestLine.pincode ?? ''),
+      locationSpecific: pin === String(requestLine.pincode ?? ''),
       sourceUrl: String(firstDefined(row.url, row.sourceUrl, row.pageUrl, '')),
       exactNameMatch: titleMatches(requestLine.name, title),
       exactPackMatch: packMatches(requestLine.quantity, { ...row, title, packSize })
