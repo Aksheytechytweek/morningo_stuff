@@ -164,8 +164,9 @@ async function reportRoute(request,env,user){
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)||!Number.isFinite(budget)||budget<=0)return json({error:'Invalid report email, time or monthly budget.'},400);
   const token=request.headers.get('authorization').slice(7);
   if(!await isHouseholdMember(env,token,householdId,user.sub))return json({error:'Household membership required.'},403);
-  await firestore(env,token,`reportSubscriptions/${encodeURIComponent(user.sub)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({email,enabled:Boolean(b.enabled??true),monthlyBudget:budget,reportTime:time,timeZone:'Asia/Kolkata',householdId})})});
-  return json({saved:true,email,enabled:Boolean(b.enabled??true),reportTime:time,timeZone:'Asia/Kolkata',deliveryStatus:env.FIREBASE_SERVICE_ACCOUNT_JSON&&env.RESEND_API_KEY&&env.REPORT_FROM_EMAIL?'scheduled':'pending-provider-setup'});
+  const verifiedEmail=String(user.email??'').trim();
+  await firestore(env,token,`reportSubscriptions/${encodeURIComponent(user.sub)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({email:verifiedEmail,enabled:Boolean(b.enabled??true),monthlyBudget:budget,reportTime:time,timeZone:'Asia/Kolkata',householdId})})});
+  return json({saved:true,email:verifiedEmail,enabled:Boolean(b.enabled??true),reportTime:time,timeZone:'Asia/Kolkata',deliveryStatus:env.FIREBASE_SERVICE_ACCOUNT_JSON&&env.RESEND_API_KEY&&env.REPORT_FROM_EMAIL?'scheduled':'pending-provider-setup'});
 }
 
 function base64Url(value){
