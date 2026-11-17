@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "203845017412",
+    "project_id": "karnan-kudumbam",
+    "storage_bucket": "karnan-kudumbam.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:203845017412:android:1638b0589305f3cc700111",
+        "android_client_info": {
+          "package_name": "in.madipakkam.grocery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBexrzoC1HBe6v1TF7qC8jIXU6swU6j6Wg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
