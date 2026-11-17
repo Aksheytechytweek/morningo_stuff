@@ -1,7 +1,5 @@
 name: Karnan Kudumbam Daily Email Report
 on:
-  schedule:
-    - cron: '30 14 * * *'
   workflow_dispatch:
 jobs:
   send-report:
