@@ -2,10 +2,15 @@ name: Android Debug APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, karnan-kudumbam-complete-integration ]
+    paths:
+      - 'karnan-kudumbam/MadipakkamGroceryManager/**'
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: karnan-kudumbam/MadipakkamGroceryManager
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -23,4 +28,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: MadipakkamGroceryManager-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: karnan-kudumbam/MadipakkamGroceryManager/app/build/outputs/apk/debug/app-debug.apk
