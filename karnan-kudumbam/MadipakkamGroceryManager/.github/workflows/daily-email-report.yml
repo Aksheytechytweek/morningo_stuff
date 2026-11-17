@@ -8,14 +8,26 @@ jobs:
   send-report:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger secure report job
+      - name: Check report-job configuration
+        id: config
         env:
           REPORT_JOB_URL: ${{ secrets.REPORT_JOB_URL }}
           DAILY_JOB_SECRET: ${{ secrets.DAILY_JOB_SECRET }}
         run: |
-          test -n "$REPORT_JOB_URL"
-          test -n "$DAILY_JOB_SECRET"
+          if [ -z "$REPORT_JOB_URL" ] || [ -z "$DAILY_JOB_SECRET" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Daily email is not enabled: configure REPORT_JOB_URL and DAILY_JOB_SECRET after deploying the secured report endpoint."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Trigger secure report job
+        if: steps.config.outputs.configured == 'true'
+        env:
+          REPORT_JOB_URL: ${{ secrets.REPORT_JOB_URL }}
+          DAILY_JOB_SECRET: ${{ secrets.DAILY_JOB_SECRET }}
+        run: |
           curl --fail-with-body --silent --show-error \
+            --retry 2 --retry-delay 5 \
             -X POST "$REPORT_JOB_URL" \
             -H "x-job-secret: $DAILY_JOB_SECRET" \
             -H "content-type: application/json" \
