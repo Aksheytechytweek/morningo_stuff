@@ -27,9 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.util.Locale
-import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -44,7 +42,7 @@ class MainActivity : ComponentActivity() {
         DailyPlanner.schedule(this)
         if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         val db = GroceryDb(this)
-        setContent { GroceryApp(db) }
+        setContent { AuthGate { GroceryApp(db) } }
     }
 }
 
@@ -95,8 +93,8 @@ class MainActivity : ComponentActivity() {
                             livePriceMessage = "Checking free-credit balance before any product search…"
                             livePriceResult = null
                             try {
-                                val user = FirebaseAuth.getInstance().currentUser ?: error("Sign in with Google in the Cloud tab before checking live prices.")
-                                val token = user.getIdToken(false).await().token ?: error("Could not obtain a secure sign-in token.")
+                                val token = SessionStore.token(context)
+                                require(token.isNotBlank()) { "Please log in before checking live prices." }
                                 val cloudPrefs = context.getSharedPreferences("karnan_cloud", android.content.Context.MODE_PRIVATE)
                                 val backendUrl = cloudPrefs.getString("backend_url", "")?.trim().orEmpty()
                                 val pincode = cloudPrefs.getString("postal_code", "600091")?.trim().orEmpty()
