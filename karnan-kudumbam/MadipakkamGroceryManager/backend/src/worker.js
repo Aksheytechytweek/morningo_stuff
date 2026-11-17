@@ -1,0 +1,138 @@
+import { verifyFirebaseIdToken } from './firebase-auth.js';
+import { extractFreeCredits, normaliseSearchResults, buildProviderSummaries, maximumFreeCreditsNeeded } from './rewalto.js';
+
+const BASE_HEADERS = {
+  'content-type': 'application/json; charset=utf-8',
+  'cache-control': 'no-store',
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET,POST,PUT,OPTIONS',
+  'access-control-allow-headers': 'authorization,content-type'
+};
+const json = (body, status=200) => new Response(JSON.stringify(body), {status, headers: BASE_HEADERS});
+
+function fsEncode(value) {
+  if (value === null || value === undefined) return {nullValue:null};
+  if (typeof value === 'string') return {stringValue:value};
+  if (typeof value === 'boolean') return {booleanValue:value};
+  if (Number.isInteger(value)) return {integerValue:String(value)};
+  if (typeof value === 'number') return {doubleValue:value};
+  return {stringValue:String(value)};
+}
+function fsFields(fields) { return Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,fsEncode(v)])); }
+function fsDecode(value) {
+  if (!value || typeof value !== 'object') return null;
+  if ('stringValue' in value) return value.stringValue;
+  if ('integerValue' in value) return Number(value.integerValue);
+  if ('doubleValue' in value) return Number(value.doubleValue);
+  if ('booleanValue' in value) return value.booleanValue;
+  if ('timestampValue' in value) return value.timestampValue;
+  if ('nullValue' in value) return null;
+  if ('arrayValue' in value) return (value.arrayValue.values ?? []).map(fsDecode);
+  if ('mapValue' in value) return Object.fromEntries(Object.entries(value.mapValue.fields ?? {}).map(([k,v])=>[k,fsDecode(v)]));
+  return null;
+}
+async function firestore(env, token, path, init={}) {
+  if (!env.FIREBASE_PROJECT_ID) throw new Error('FIREBASE_PROJECT_ID is not configured');
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(env.FIREBASE_PROJECT_ID)}/databases/(default)/documents/${path}`;
+  const response = await fetch(url,{...init,headers:{authorization:`Bearer ${token}`,'content-type':'application/json',...(init.headers??{})}});
+  const raw=await response.text(); let data={}; try{data=raw?JSON.parse(raw):{};}catch{}
+  if(!response.ok) throw Object.assign(new Error(data.error?.message??`Firestore HTTP ${response.status}`),{status:response.status});
+  return data;
+}
+async function auth(request, env) {
+  const header=request.headers.get('authorization')??'';
+  if(!header.startsWith('Bearer ')) throw Object.assign(new Error('Missing Firebase ID token'),{status:401});
+  try{return await verifyFirebaseIdToken(header.slice(7),env.FIREBASE_PROJECT_ID);}
+  catch{throw Object.assign(new Error('Invalid authentication token'),{status:401});}
+}
+async function rewalto(env,path,params={}) {
+  if(!env.REWALTO_API_KEY) throw new Error('REWALTO_API_KEY is not configured');
+  const url=new URL(`https://api.rewalto.com${path}`);
+  Object.entries(params).forEach(([k,v])=>url.searchParams.set(k,String(v)));
+  const response=await fetch(url,{headers:{authorization:`Bearer ${env.REWALTO_API_KEY}`,accept:'application/json'},signal:AbortSignal.timeout(20000)});
+  const raw=await response.text();let data={};try{data=raw?JSON.parse(raw):{};}catch{data={message:raw.slice(0,200)};}
+  if(!response.ok)throw Object.assign(new Error(data.error?.message??data.message??`Rewalto HTTP ${response.status}`),{status:response.status,providerCode:data.error?.code??data.code});
+  return data;
+}
+async function rewaltoRoute(request,env,path) {
+  if(request.method==='GET'&&path==='/v1/rewalto/sample'){
+    try{
+      const [v,c]=await Promise.all([fetch('https://api.rewalto.com/v1/version'),fetch('https://api.rewalto.com/v1/catalogue/products?status=live')]);
+      if(!v.ok||!c.ok)throw new Error('Public sample unavailable');
+      const version=await v.json(),catalogue=await c.json();
+      const rows=Array.isArray(catalogue)?catalogue:(catalogue.products??catalogue.datasets??catalogue.items??catalogue.data??[]);
+      return json({provider:'Rewalto',sampleFree:true,creditsConsumed:0,version:version.version??version.release??version,liveCatalogueAvailable:Array.isArray(rows),liveDatasetCount:Array.isArray(rows)?rows.length:null,note:'Public catalogue test only; no price-search credits consumed.'});
+    }catch(e){return json({error:'Rewalto public sample unavailable',detail:e.message},503);}
+  }
+  if(request.method==='GET'&&path==='/v1/rewalto/balance'){
+    try{const b=await rewalto(env,'/v1/credits/balance');const free=extractFreeCredits(b);if(free===null)return json({error:'Free-credit balance cannot be verified; price checks blocked.'},502);return json({provider:'Rewalto',freeCredits:free,paidUsageAllowed:false,policy:'free-credits-only'});}
+    catch(e){return json({error:'Rewalto balance unavailable; no search started.',providerCode:e.providerCode},e.status??503);}
+  }
+  if(request.method==='POST'&&path==='/v1/rewalto/basket/compare'){
+    try{
+      const {pincode,lines}=await request.json();
+      if(!/^[1-9][0-9]{5}$/.test(String(pincode??''))||!Array.isArray(lines)||lines.length<1||lines.length>20)return json({error:'Provide a six-digit PIN and 1–20 basket items.'},400);
+      const clean=lines.map((x,i)=>({id:String(x.id??i+1).slice(0,80),name:String(x.name??'').trim().slice(0,120),quantity:String(x.quantity??'').trim().slice(0,60),quantityCount:Math.max(1,Math.min(50,Number(x.quantityCount??1)))}));
+      if(clean.some(x=>!x.name||!x.quantity))return json({error:'Every item needs a product name and pack size.'},400);
+      const before=extractFreeCredits(await rewalto(env,'/v1/credits/balance')),maximum=maximumFreeCreditsNeeded(clean.length);
+      if(before===null)return json({error:'Free-credit balance cannot be verified. Paid usage is blocked.'},503);
+      if(before<maximum)return json({error:'Insufficient free credits. No searches were made.',freeCredits:before,maximumCredits:maximum,paidUsageAllowed:false},402);
+      const observations=[];
+      for(const line of clean){
+        const current=extractFreeCredits(await rewalto(env,'/v1/credits/balance'));
+        if(current===null||current<1)break;
+        const result=await rewalto(env,'/v1/data/listings/search',{q:`${line.name} ${line.quantity}`,pincode,limit:10,include:'latest'});
+        observations.push(...normaliseSearchResults(result,{...line,pincode}));
+      }
+      const providers=buildProviderSummaries(clean,observations);
+      const after=extractFreeCredits(await rewalto(env,'/v1/credits/balance'));
+      const recommendation=providers.filter(x=>x.complete).sort((a,b)=>(a.productSubtotal??Infinity)-(b.productSubtotal??Infinity))[0]??null;
+      return json({provider:'Rewalto',pincode,fetchedAt:new Date().toISOString(),sourceNote:'Stored public-page observations, not guaranteed checkout quotes. Verify timestamp, stock and price in retailer app.',freeCreditsBefore:before,freeCreditsAfter:after,maximumCreditsReservedByPolicy:maximum,paidUsageAllowed:false,partialCheck:clean.some(x=>!observations.some(o=>o.requestLineId===x.id)),recommendation,providers,observations});
+    }catch(e){return json({error:'Price data unavailable. No paid fallback will be attempted.',providerCode:e.providerCode},e.status===402?402:e.status===429?429:503);}
+  }
+  return json({error:'Not found'},404);
+}
+async function expenseRoute(request,env,user){
+  const token=request.headers.get('authorization').slice(7),uid=encodeURIComponent(user.sub);
+  if(request.method==='POST'){
+    const {householdId,expenses}=await request.json();
+    if(householdId!==user.sub)return json({error:'Household membership not configured for this account'},403);
+    if(!Array.isArray(expenses)||expenses.length>500)return json({error:'Invalid sync payload'},400);
+    const writes=[];
+    for(const x of expenses){
+      if(!x?.id||!/^[A-Za-z0-9_-]{1,160}$/.test(String(x.id))||!/^\d{4}-\d{2}-\d{2}$/.test(String(x.date))||!Number.isFinite(Number(x.amount))||Number(x.amount)<0||Number(x.amount)>10000000)continue;
+      writes.push({update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/households/${uid}/expenses/${encodeURIComponent(String(x.id))}`,fields:fsFields({date:String(x.date),amount:Number(x.amount),category:String(x.category??'Other').slice(0,80),note:String(x.note??'').slice(0,500),payment:String(x.payment??'Cash').slice(0,40)})}});
+    }
+    if(writes.length)await firestore(env,token,'documents:commit',{method:'POST',body:JSON.stringify({writes})});
+    return json({synced:true,count:writes.length});
+  }
+  if(request.method==='GET'){
+    const data=await firestore(env,token,`households/${uid}/expenses?pageSize=1000`);
+    return json({householdId:user.sub,expenses:(data.documents??[]).map(d=>({id:d.name.split('/').pop(),...Object.fromEntries(Object.entries(d.fields??{}).map(([k,v])=>[k,fsDecode(v)]))}))});
+  }
+  return json({error:'Method not allowed'},405);
+}
+async function reportRoute(request,env,user){
+  if(request.method!=='PUT')return json({error:'Method not allowed'},405);
+  const b=await request.json(),email=String(b.email??'').trim().toLowerCase(),verified=String(user.email??'').trim().toLowerCase(),time=String(b.reportTime??'20:00'),budget=Number(b.monthlyBudget??15000);
+  if(user.email_verified!==true||!verified||email!==verified)return json({error:'Use the verified email address on the signed-in account.'},403);
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)||!Number.isFinite(budget)||budget<=0)return json({error:'Invalid report email, time or monthly budget.'},400);
+  const token=request.headers.get('authorization').slice(7);
+  await firestore(env,token,`reportSubscriptions/${encodeURIComponent(user.sub)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({email,enabled:Boolean(b.enabled??true),monthlyBudget:budget,reportTime:time,timeZone:'Asia/Kolkata'})})});
+  return json({saved:true,email,enabled:Boolean(b.enabled??true),reportTime:time,timeZone:'Asia/Kolkata',deliveryStatus:'pending-scheduler-setup'});
+}
+export default {
+  async fetch(request,env){
+    const url=new URL(request.url);
+    if(request.method==='OPTIONS')return new Response(null,{status:204,headers:BASE_HEADERS});
+    if(url.pathname==='/health'&&request.method==='GET')return json({ok:true,service:'karnan-kudumbam-api',runtime:'cloudflare-workers'});
+    try{
+      const user=await auth(request,env);
+      if(url.pathname.startsWith('/v1/rewalto/'))return await rewaltoRoute(request,env,url.pathname);
+      if(url.pathname==='/v1/expenses/sync')return await expenseRoute(request,env,user);
+      if(url.pathname==='/v1/report-subscription')return await reportRoute(request,env,user);
+      if(url.pathname==='/internal/jobs/daily-report')return json({error:'Scheduled PDF email delivery is not enabled in this Worker build.'},503);
+      return json({error:'Not found'},404);
+    }catch(e){return json({error:e.message??'Request failed'},e.status??500);}
+  }
+};
