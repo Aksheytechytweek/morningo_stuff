@@ -1,4 +1,4 @@
-package in.madipakkam.grocery
+package `in`.madipakkam.grocery
 
 import android.app.Activity
 import android.content.Context
