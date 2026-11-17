@@ -28,16 +28,19 @@ Updated 2026-11-17. Work is on `karnan-kudumbam-complete-integration`; main has 
 3. **Firebase**
    - Enable Email/Password Authentication and Firestore.
    - Publish this branch's `firestore.rules` using the manual GitHub deployment workflow.
-   - Keep the Android `google-services.json` project config in the app folder and out of service-account handling.\n6. **Android signing**\n   - Create a release keystore locally. Add `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` and `ANDROID_STORE_PASSWORD` as GitHub Actions secrets. The signed AAB workflow fails closed if any secret is missing. Never commit the keystore.
-4. **Rewalto**
+   - Keep the Android `google-services.json` project config in the app folder and out of service-account handling.
+4. **Android signing**
+   - Create a release keystore locally. Add `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` and `ANDROID_STORE_PASSWORD` as GitHub Actions secrets. The signed AAB workflow fails closed if any secret is missing. Never commit the keystore.
+5. **Rewalto**
    - Validate the live `/v1/credits/balance` response and API permissions using the actual account.
    - The public API contract documents bearer authentication, listing search and credit-based reads. Results remain dated public-page observations, not checkout quotes.
-5. **Release/device**
+6. **Release/device**
    - Configure Android signing secrets outside Git, build a signed APK/AAB and install it on the Moto Edge 60 Pro.
    - Test sign-in, email verification, two-account invitation/join, shared expense sync, report email and live Rewalto checks.
 
 ## Deployment workflows
-- Android debug build: `.github/workflows/karnan-android-build.yml`\n- Signed Android release (manual): `.github/workflows/karnan-kudumbam-release.yml`
+- Android debug build: `.github/workflows/karnan-android-build.yml`
+- Signed Android release (manual): `.github/workflows/karnan-kudumbam-release.yml`
 - Backend tests: `.github/workflows/karnan-kudumbam-backend.yml`
 - Firebase rules deployment (manual): `.github/workflows/karnan-kudumbam-deploy-firestore.yml`
 - Cloudflare Worker deployment (manual): `.github/workflows/karnan-kudumbam-deploy-worker.yml`
