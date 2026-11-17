@@ -20,3 +20,6 @@ jobs:
       - name: Run backend tests
         working-directory: karnan-kudumbam/MadipakkamGroceryManager/backend
         run: npm test
+      - name: Validate Cloudflare Worker bundle
+        working-directory: karnan-kudumbam/MadipakkamGroceryManager/backend
+        run: npx wrangler deploy --dry-run --outdir /tmp/karnan-worker-dist
