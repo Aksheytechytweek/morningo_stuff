@@ -119,10 +119,10 @@ import java.util.UUID
                     val token=user.getIdToken(false).await().token ?: error("No Firebase token")
                     BackendApi.baseUrl=url.trim()
                     BackendApi.saveReportSubscription(token,"aksheysun@gmail.com")
-                    message="Daily 8 PM email subscription enabled on configured backend."
+                    message="Report preference saved. Automated PDF email delivery is not active yet; scheduler setup is still required."
                 } catch(e:Exception) { message="Email activation unavailable: ${e.localizedMessage}" }
             }
-        }) { Text("Enable daily 8 PM PDF email") }
+        }) { Text("Save daily report preference (delivery pending)") }
         Text("Open the Basket tab and tap Check Live Prices to run a manual Rewalto comparison. The backend uses only the free monthly credit balance and stops if it cannot safely verify that allowance.", style=MaterialTheme.typography.bodySmall)
         Text(message, style=MaterialTheme.typography.bodyMedium)
         Text("Rewalto public sample and price observations are not retailer-owned APIs or guaranteed checkout quotes. No orders are placed by this app.", style=MaterialTheme.typography.bodySmall)
