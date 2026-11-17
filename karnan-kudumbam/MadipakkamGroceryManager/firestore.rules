@@ -21,7 +21,7 @@ service cloud.firestore {
             && request.resource.data.role == 'member'
             && exists(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode))
             && get(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode)).data.email == request.auth.token.email
-            && get(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode)).data.status == 'pending')
+            && get(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode)).data.status == 'pending'\n            && get(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode)).data.expiresAt > request.time)
         );
         allow update, delete: if isOwner(householdId);
       }
