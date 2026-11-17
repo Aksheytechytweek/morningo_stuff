@@ -26,3 +26,11 @@ test('OPTIONS preflight is handled without authentication',async()=>{
  const response=await worker.fetch(new Request('https://api.example.test/v1/expenses/sync',{method:'OPTIONS'}),{});
  assert.equal(response.status,204);assert.equal(response.headers.get('access-control-allow-origin'),'*');
 });
+
+test('manual daily report job is protected by a dedicated secret',async()=>{
+ const request=new Request('https://api.example.test/internal/jobs/daily-report',{method:'POST'});
+ const denied=await worker.fetch(request,{});
+ assert.equal(denied.status,401);
+ const wrong=await worker.fetch(new Request('https://api.example.test/internal/jobs/daily-report',{method:'POST',headers:{'x-job-secret':'wrong'}}),{DAILY_JOB_SECRET:'expected'});
+ assert.equal(wrong.status,401);
+});
