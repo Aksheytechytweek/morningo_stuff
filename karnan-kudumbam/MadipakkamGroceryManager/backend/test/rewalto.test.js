@@ -17,8 +17,8 @@ test('retailer names are normalised to supported platforms', () => {
 test('normalises Rewalto paise, stock and exact pack evidence', () => {
   const rows = normaliseSearchResults({ listings: [{
     retailer: 'blinkit', title: 'Aashirvaad Atta 1 kg', packSize: '1 kg', price: 5500,
-    latest: { stockState: 'in_stock', readAt: '2026-11-12T10:00:00Z', pincode: '600091' }
-  }] }, { id: '1', name: 'Aashirvaad Atta', quantity: '1 kg', pincode: '600091' });
+    latest: { stockState: 'in_stock', readAt: '2026-11-17T10:00:00Z', pincode: '600091' }
+  }] }, { id: '1', name: 'Aashirvaad Atta', quantity: '1 kg', pincode: '600091', now: '2026-11-17T10:30:00Z' });
   assert.equal(rows[0].price, 55);
   assert.equal(rows[0].exactPackMatch, true);
   assert.equal(rows[0].stock, 'in_stock');
@@ -49,7 +49,15 @@ test('national BigBasket readings cannot complete a PIN-specific basket', () => 
 test('PIN-matched BigBasket observations can qualify for a complete basket', () => {
   const rows = normaliseSearchResults({ listings: [{
     retailer: 'bigbasket', title: 'Amul Milk 500 ml', packSize: '500 ml', price: 3200,
-    latest: { stockState: 'in_stock', readAt: '2026-11-16T10:00:00Z', pincode: '600091' }
-  }] }, { id: '1', name: 'Amul Milk', quantity: '500 ml', pincode: '600091' });
+    latest: { stockState: 'in_stock', readAt: '2026-11-17T10:00:00Z', pincode: '600091' }
+  }] }, { id: '1', name: 'Amul Milk', quantity: '500 ml', pincode: '600091', now: '2026-11-17T10:30:00Z' });
   assert.equal(rows[0].locationSpecific, true);
+});
+
+test('stale or undated stock is unknown and cannot qualify for a provider basket', () => {
+  const rows = normaliseSearchResults({ listings: [{
+    retailer: 'zepto', title: 'Amul Milk 500 ml', packSize: '500 ml', price: 3200,
+    latest: { stockState: 'in_stock', readAt: '2026-11-14T10:00:00Z', pincode: '600091' }
+  }] }, { id: '1', name: 'Amul Milk', quantity: '500 ml', pincode: '600091', now: '2026-11-17T10:30:00Z' });
+  assert.equal(rows[0].stock, 'unknown');
 });
