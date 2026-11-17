@@ -16,7 +16,7 @@ android {
         versionCode = 2
         versionName = "1.1.0"
     }
-    buildFeatures { compose = true }
+    signingConfigs {\n        create("release") {\n            if (!releaseStorePath.isNullOrBlank()) {\n                storeFile = file(releaseStorePath)\n                storePassword = releaseStorePassword\n                keyAlias = releaseKeyAlias\n                keyPassword = releaseKeyPassword\n            }\n        }\n    }\n    buildTypes {\n        getByName("release") {\n            signingConfig = signingConfigs.getByName("release")\n            isMinifyEnabled = false\n        }\n    }\n    buildFeatures { compose = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
