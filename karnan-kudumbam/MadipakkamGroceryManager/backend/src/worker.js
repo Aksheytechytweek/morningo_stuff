@@ -113,7 +113,7 @@ async function householdRoute(request,env,user){
     return json({created:true,householdId,role:'owner'});
   }
   if(request.method==='POST'&&new URL(request.url).pathname==='/v1/households/invitations'){
-    const b=await request.json(),householdId=String(b.householdId??user.sub),email=String(b.email??'').trim().toLowerCase();
+    const b=await request.json(),householdId=String(b.householdId??user.sub),email=String(b.email??'').trim();
     if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return json({error:'Enter a valid invite email.'},400);
     if(!await isHouseholdMember(env,token,householdId,user.sub))return json({error:'Household membership required.'},403);
     const owner=householdId===user.sub||decodeFields((await getDocument(env,token,`households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(user.sub)}`))?.fields).role==='owner';
@@ -128,7 +128,7 @@ async function householdRoute(request,env,user){
     if(!/^[A-Za-z0-9]{24,64}$/.test(code)||!householdId)return json({error:'Household ID and valid invitation code are required.'},400);
     const invite=await getDocument(env,token,`households/${encodeURIComponent(householdId)}/invitations/${encodeURIComponent(code)}`);
     const fields=decodeFields(invite?.fields);
-    if(!invite||fields.status!=='pending'||fields.email!==String(user.email??'').toLowerCase()||Date.parse(fields.expiresAt??'')<=Date.now())return json({error:'Invitation is invalid, expired, or addressed to another email.'},403);
+    if(!invite||fields.status!=='pending'||String(fields.email??'').toLowerCase()!==String(user.email??'').toLowerCase()||Date.parse(fields.expiresAt??'')<=Date.now())return json({error:'Invitation is invalid, expired, or addressed to another email.'},403);
     await firestore(env,token,`households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(user.sub)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({uid:user.sub,email:String(user.email??''),role:'member',joinedAt:new Date().toISOString(),inviteCode:code})})});
     await firestore(env,token,`households/${encodeURIComponent(householdId)}/invitations/${encodeURIComponent(code)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({...fields,status:'accepted',acceptedBy:user.sub,acceptedAt:new Date().toISOString()})})});
     return json({joined:true,householdId,role:'member'});
