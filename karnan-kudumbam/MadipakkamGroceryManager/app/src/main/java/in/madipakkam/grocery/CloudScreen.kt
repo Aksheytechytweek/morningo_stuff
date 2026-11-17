@@ -28,6 +28,10 @@ import java.util.UUID
     val prefs = remember { context.getSharedPreferences("karnan_cloud", Context.MODE_PRIVATE) }
     var url by remember { mutableStateOf(prefs.getString("backend_url", "") ?: "") }
     var postalCode by remember { mutableStateOf(prefs.getString("postal_code", "600091") ?: "600091") }
+    var householdId by remember { mutableStateOf(prefs.getString("household_id", "") ?: "") }
+    var inviteEmail by remember { mutableStateOf("") }
+    var joinCode by remember { mutableStateOf("") }
+    var joinHouseholdId by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("Cloud connection is optional. Local expenses work without it.") }
     var signedIn by remember { mutableStateOf(try { FirebaseAuth.getInstance().currentUser?.email } catch (_: Exception) { null }) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -74,6 +78,48 @@ import java.util.UUID
                 }
             } catch(e:Exception) { message="Firebase setup required: ${e.localizedMessage}" }
         }) { Text("Sign in with Google") }
+        OutlinedTextField(value=householdId,onValueChange={householdId=it},label={Text("Household ID")},singleLine=true,modifier=Modifier.fillMaxWidth())
+        Button(onClick={
+            scope.launch {
+                try {
+                    val user=FirebaseAuth.getInstance().currentUser ?: error("Sign in first")
+                    val token=user.getIdToken(true).await().token ?: error("No Firebase token")
+                    BackendApi.baseUrl=url.trim()
+                    val result=BackendApi.createHousehold(token)
+                    householdId=result.getString("householdId")
+                    prefs.edit().putString("household_id",householdId).apply()
+                    message="Household created. Share this Household ID with invited family members."
+                } catch(e:Exception) { message="Could not create household: ${e.localizedMessage}" }
+            }
+        }) { Text("Create my household") }
+        OutlinedTextField(value=inviteEmail,onValueChange={inviteEmail=it},label={Text("Family member email to invite")},singleLine=true,modifier=Modifier.fillMaxWidth())
+        Button(onClick={
+            scope.launch {
+                try {
+                    val user=FirebaseAuth.getInstance().currentUser ?: error("Sign in first")
+                    val token=user.getIdToken(true).await().token ?: error("No Firebase token")
+                    BackendApi.baseUrl=url.trim()
+                    val result=BackendApi.inviteHouseholdMember(token,householdId.ifBlank { user.uid },inviteEmail)
+                    message="Invitation created for ${result.optString("invitedEmail")}. Share Household ID ${result.optString("householdId")} and code ${result.optString("inviteCode")} with them. Expires in 7 days."
+                } catch(e:Exception) { message="Could not create invitation: ${e.localizedMessage}" }
+            }
+        },enabled=inviteEmail.contains("@")) { Text("Create family invitation") }
+        OutlinedTextField(value=joinHouseholdId,onValueChange={joinHouseholdId=it},label={Text("Invited household ID")},singleLine=true,modifier=Modifier.fillMaxWidth())
+        OutlinedTextField(value=joinCode,onValueChange={joinCode=it},label={Text("Invitation code")},singleLine=true,modifier=Modifier.fillMaxWidth())
+        Button(onClick={
+            scope.launch {
+                try {
+                    val user=FirebaseAuth.getInstance().currentUser ?: error("Sign in first")
+                    require(user.isEmailVerified) { "Verify your email before joining a household." }
+                    val token=user.getIdToken(true).await().token ?: error("No Firebase token")
+                    BackendApi.baseUrl=url.trim()
+                    val result=BackendApi.joinHousehold(token,joinHouseholdId,joinCode)
+                    householdId=result.getString("householdId")
+                    prefs.edit().putString("household_id",householdId).apply()
+                    message="Joined household successfully. Shared expense sync is now enabled."
+                } catch(e:Exception) { message="Could not join household: ${e.localizedMessage}" }
+            }
+        },enabled=joinHouseholdId.isNotBlank()&&joinCode.isNotBlank()) { Text("Join family household") }
         Button(onClick={
             scope.launch {
                 try {
@@ -96,7 +142,7 @@ import java.util.UUID
                     db.expenses("%") .forEach { item -> expenses.put(JSONObject().apply {
                         put("id", "${deviceId}_${item.id}");put("date",item.date);put("amount",item.amount);put("category",item.category);put("note",item.note);put("payment",item.payment)
                     }) }
-                    BackendApi.syncExpenses(token,user.uid,expenses)
+                    BackendApi.syncExpenses(token,householdId.ifBlank { user.uid },expenses)
                     message="Uploaded ${expenses.length()} expense records. Other-device downloads are available using the sync API."
                 } catch(e:Exception) { message="Sync unavailable: ${e.localizedMessage}" }
             }
@@ -109,7 +155,7 @@ import java.util.UUID
                     BackendApi.baseUrl=url.trim()
                     val deviceId=prefs.getString("device_id", "") ?: ""
                     val imported=prefs.getStringSet("imported_remote_ids",emptySet())!!.toMutableSet()
-                    val remote=BackendApi.fetchExpenses(token).getJSONArray("expenses")
+                    val remote=BackendApi.fetchExpenses(token,householdId.ifBlank { user.uid }).getJSONArray("expenses")
                     var count=0
                     for(i in 0 until remote.length()) {
                         val item=remote.getJSONObject(i)
