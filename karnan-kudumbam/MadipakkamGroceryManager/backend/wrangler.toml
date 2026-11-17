@@ -1,0 +1,6 @@
+name = "karnan-kudumbam-api"
+main = "src/worker.js"
+compatibility_date = "2026-11-17"
+
+[vars]
+FIREBASE_PROJECT_ID = "karnan-kudumbam"
