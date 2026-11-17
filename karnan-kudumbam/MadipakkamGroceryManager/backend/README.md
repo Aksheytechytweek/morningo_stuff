@@ -12,7 +12,7 @@ This Worker uses the Fetch runtime directly and verifies Firebase ID tokens. It 
 - POST /v1/households/join — verified-email invitation acceptance.
 - POST /v1/expenses/sync — authenticated household expense upload.
 - GET /v1/expenses/sync?householdId=... — authenticated household expense download.
-- PUT /v1/report-subscription — stores a verified-email report preference only. It does not send scheduled email.
+- PUT /v1/report-subscription — stores a verified-email report preference and household ID.\n- POST /internal/jobs/daily-report — secret-protected manual report run.\n- Worker Cron — checks report subscriptions each minute in Asia/Kolkata and sends a PDF at the selected report time.
 - GET /health — deployment smoke check.
 
 Android requests send Firebase ID tokens as Authorization: Bearer <token>.
