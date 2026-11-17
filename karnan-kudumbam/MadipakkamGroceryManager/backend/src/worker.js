@@ -114,7 +114,7 @@ async function householdRoute(request,env,user){
   }
   if(request.method==='POST'&&new URL(request.url).pathname==='/v1/households/invitations'){
     const b=await request.json(),householdId=String(b.householdId??user.sub),email=String(b.email??'').trim();
-    if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return json({error:'Enter a valid invite email.'},400);
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:'Enter a valid invite email.'},400);
     if(!await isHouseholdMember(env,token,householdId,user.sub))return json({error:'Household membership required.'},403);
     const owner=householdId===user.sub||decodeFields((await getDocument(env,token,`households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(user.sub)}`))?.fields).role==='owner';
     if(!owner)return json({error:'Only the household owner can invite members.'},403);
