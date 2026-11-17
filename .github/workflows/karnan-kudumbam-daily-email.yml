@@ -1,0 +1,32 @@
+name: Karnan Kudumbam Daily Email Report
+on:
+  schedule:
+    - cron: '30 14 * * *'
+  workflow_dispatch:
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check report-job configuration
+        id: config
+        env:
+          REPORT_JOB_URL: ${{ secrets.REPORT_JOB_URL }}
+          DAILY_JOB_SECRET: ${{ secrets.DAILY_JOB_SECRET }}
+        run: |
+          if [ -z "$REPORT_JOB_URL" ] || [ -z "$DAILY_JOB_SECRET" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Daily email remains disabled until REPORT_JOB_URL and DAILY_JOB_SECRET are configured."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Trigger secure report job
+        if: steps.config.outputs.configured == 'true'
+        env:
+          REPORT_JOB_URL: ${{ secrets.REPORT_JOB_URL }}
+          DAILY_JOB_SECRET: ${{ secrets.DAILY_JOB_SECRET }}
+        run: |
+          curl --fail-with-body --silent --show-error --retry 2 --retry-delay 5 \
+            -X POST "$REPORT_JOB_URL" \
+            -H "x-job-secret: $DAILY_JOB_SECRET" \
+            -H "content-type: application/json" \
+            --data '{}'
