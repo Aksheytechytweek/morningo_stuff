@@ -137,8 +137,8 @@ async function householdRoute(request,env,user){
 async function expenseRoute(request,env,user){
   const token=request.headers.get('authorization').slice(7);
   if(request.method==='POST'){
-    const {householdId,expenses}=await request.json();
-    if(householdId!==user.sub)return json({error:'Household membership not configured for this account'},403);
+    const {householdId=user.sub,expenses}=await request.json();
+    if(!await isHouseholdMember(env,token,String(householdId),user.sub))return json({error:'Household membership required.'},403);
     if(!Array.isArray(expenses)||expenses.length>500)return json({error:'Invalid sync payload'},400);
     const writes=[];
     for(const x of expenses){
@@ -149,8 +149,10 @@ async function expenseRoute(request,env,user){
     return json({synced:true,count:writes.length});
   }
   if(request.method==='GET'){
-    const data=await firestore(env,token,`households/${uid}/expenses?pageSize=1000`);
-    return json({householdId:user.sub,expenses:(data.documents??[]).map(d=>({id:d.name.split('/').pop(),...Object.fromEntries(Object.entries(d.fields??{}).map(([k,v])=>[k,fsDecode(v)]))}))});
+    const householdId=new URL(request.url).searchParams.get('householdId')??user.sub;
+    if(!await isHouseholdMember(env,token,householdId,user.sub))return json({error:'Household membership required.'},403);
+    const data=await firestore(env,token,`households/${encodeURIComponent(householdId)}/expenses?pageSize=1000`);
+    return json({householdId,expenses:(data.documents??[]).map(d=>({id:d.name.split('/').pop(),...Object.fromEntries(Object.entries(d.fields??{}).map(([k,v])=>[k,fsDecode(v)]))}))});
   }
   return json({error:'Method not allowed'},405);
 }
