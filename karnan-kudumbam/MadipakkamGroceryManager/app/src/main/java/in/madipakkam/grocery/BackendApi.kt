@@ -64,10 +64,16 @@ object BackendApi {
         } finally { connection.disconnect() }
     }
 
-    suspend fun fetchExpenses(idToken: String): JSONObject = withContext(Dispatchers.IO) {
+    suspend fun createHousehold(idToken: String): JSONObject = request("POST", "/v1/households", idToken, JSONObject())
+    suspend fun inviteHouseholdMember(idToken: String, householdId: String, email: String): JSONObject =
+        request("POST", "/v1/households/invitations", idToken, JSONObject().put("householdId", householdId).put("email", email))
+    suspend fun joinHousehold(idToken: String, householdId: String, inviteCode: String): JSONObject =
+        request("POST", "/v1/households/join", idToken, JSONObject().put("householdId", householdId).put("inviteCode", inviteCode))
+
+    suspend fun fetchExpenses(idToken: String, householdId: String): JSONObject = withContext(Dispatchers.IO) {
         val root = baseUrl.trimEnd('/')
         require(root.startsWith("https://")) { "Backend HTTPS URL has not been configured." }
-        val connection = (URL(root + "/v1/expenses/sync").openConnection() as HttpURLConnection).apply {
+        val connection = (URL(root + "/v1/expenses/sync?householdId=" + java.net.URLEncoder.encode(householdId, "UTF-8")).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 15000
             readTimeout = 20000
