@@ -60,7 +60,9 @@ function toRupees(value, explicitRupees = false) {
   if (!Number.isFinite(number) || number < 0) return null;
   return explicitRupees ? number : number / 100; // Rewalto documents price/MRP in paise.
 }
-function stockState(value) {
+function stockState(value, checkedAt, now = Date.now()) {
+  const observed = Date.parse(checkedAt ?? '');
+  if (!Number.isFinite(observed) || observed > now + 5 * 60 * 1000 || now - observed > 48 * 60 * 60 * 1000) return 'unknown';
   const state = String(value ?? '').toLowerCase();
   if (['in_stock', 'instock', 'available', 'in stock', 'true'].includes(state)) return 'in_stock';
   if (['out_of_stock', 'outofstock', 'unavailable', 'out of stock', 'false'].includes(state)) return 'out_of_stock';
@@ -90,8 +92,9 @@ export function normaliseSearchResults(payload, requestLine) {
     const rawPrice = firstDefined(latest.pricePaise, latest.sellingPricePaise, latest.price, row.pricePaise, row.price, row.sellingPricePaise);
     const explicitRupees = latest.priceRupees !== undefined || row.priceRupees !== undefined;
     const price = toRupees(firstDefined(latest.priceRupees, row.priceRupees, rawPrice), explicitRupees);
-    const stock = stockState(firstDefined(latest.stockState, latest.stock, latest.availability, latest.inStock, row.stockState, row.stock));
     const checkedAt = firstDefined(latest.readAt, latest.observedAt, latest.checkedAt, latest.collectedAt, row.readAt, row.updatedAt, null);
+    const suppliedNow = requestLine.now ? Date.parse(requestLine.now) : Date.now();
+    const stock = stockState(firstDefined(latest.stockState, latest.stock, latest.availability, latest.inStock, row.stockState, row.stock), checkedAt, Number.isFinite(suppliedNow) ? suppliedNow : Date.now());
     const pin = String(firstDefined(latest.pincode, latest.pinCode, row.pincode, row.pinCode, '')).trim();
     return {
       requestLineId: requestLine.id,
