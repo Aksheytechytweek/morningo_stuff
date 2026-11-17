@@ -180,8 +180,8 @@ import java.util.UUID
                     require(user.isEmailVerified && accountEmail.isNotBlank()) {
                         "Verify the signed-in account email first. Then sign out and sign in again."
                     }
-                    BackendApi.saveReportSubscription(token,accountEmail,householdId=householdId.ifBlank { user.uid })
-                    message="Daily PDF report saved for $accountEmail at 8:00 PM IST. It will send after the backend email provider is configured."
+                    val report=BackendApi.saveReportSubscription(token,accountEmail,householdId=householdId.ifBlank { user.uid })
+                    message=if(report.optString("deliveryStatus")=="scheduled") "Daily PDF report scheduled for $accountEmail at 8:00 PM IST." else "Report preference saved for $accountEmail. Email delivery is waiting for backend provider setup."
                 } catch(e:Exception) { message="Email activation unavailable: ${e.localizedMessage}" }
             }
         }) { Text("Enable daily report for my verified email") }
