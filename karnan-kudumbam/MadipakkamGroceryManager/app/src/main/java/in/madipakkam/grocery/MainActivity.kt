@@ -28,6 +28,8 @@ import java.text.NumberFormat
 import java.time.LocalDate
 import java.util.Locale
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import com.google.firebase.auth.FirebaseAuth
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -93,8 +95,9 @@ class MainActivity : ComponentActivity() {
                             livePriceMessage = "Checking free-credit balance before any product search…"
                             livePriceResult = null
                             try {
-                                val token = SessionStore.token(context)
-                                require(token.isNotBlank()) { "Please log in before checking live prices." }
+                                val user = FirebaseAuth.getInstance().currentUser ?: error("Please log in before checking live prices.")
+                                val token = user.getIdToken(false).await().token ?: error("Firebase session expired. Please sign in again.")
+                                SessionStore.save(context, token)
                                 val cloudPrefs = context.getSharedPreferences("karnan_cloud", android.content.Context.MODE_PRIVATE)
                                 val backendUrl = cloudPrefs.getString("backend_url", "")?.trim().orEmpty()
                                 val pincode = cloudPrefs.getString("postal_code", "600091")?.trim().orEmpty()
