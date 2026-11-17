@@ -103,7 +103,7 @@ async function expenseRoute(request,env,user){
       if(!x?.id||!/^[A-Za-z0-9_-]{1,160}$/.test(String(x.id))||!/^\d{4}-\d{2}-\d{2}$/.test(String(x.date))||!Number.isFinite(Number(x.amount))||Number(x.amount)<0||Number(x.amount)>10000000)continue;
       writes.push({update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/households/${uid}/expenses/${encodeURIComponent(String(x.id))}`,fields:fsFields({date:String(x.date),amount:Number(x.amount),category:String(x.category??'Other').slice(0,80),note:String(x.note??'').slice(0,500),payment:String(x.payment??'Cash').slice(0,40)})}});
     }
-    if(writes.length)await firestore(env,token,'documents:commit',{method:'POST',body:JSON.stringify({writes})});
+    if(writes.length)await firestore(env,token,':commit',{method:'POST',body:JSON.stringify({writes})});
     return json({synced:true,count:writes.length});
   }
   if(request.method==='GET'){
