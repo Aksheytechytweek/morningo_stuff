@@ -37,12 +37,14 @@ object BackendApi {
         email: String,
         enabled: Boolean = true,
         monthlyBudget: Double = 15000.0,
-        reportTime: String = "20:00"
+        reportTime: String = "20:00",
+        householdId: String = ""
     ): JSONObject = request("PUT", "/v1/report-subscription", idToken, JSONObject().apply {
         put("email", email)
         put("enabled", enabled)
         put("monthlyBudget", monthlyBudget)
         put("reportTime", reportTime)
+        if (householdId.isNotBlank()) put("householdId", householdId)
     })
 
     private suspend fun get(path: String, idToken: String): JSONObject = withContext(Dispatchers.IO) {
