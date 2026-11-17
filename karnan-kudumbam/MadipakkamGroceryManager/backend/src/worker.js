@@ -19,7 +19,7 @@ function fsEncode(value) {
   if (typeof value === 'number') return {doubleValue:value};
   return {stringValue:String(value)};
 }
-function fsFields(fields) { return Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,fsEncode(v)])); }
+function fsFields(fields) { return Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,k==='expiresAt'&&typeof v==='string'?{timestampValue:v}:fsEncode(v)])); }
 function fsDecode(value) {
   if (!value || typeof value !== 'object') return null;
   if ('stringValue' in value) return value.stringValue;
