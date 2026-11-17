@@ -52,6 +52,18 @@ import java.util.UUID
             BackendApi.baseUrl=url.trim(); message="Saved locally."
         }) { Text("Save connection settings") }
         Text("Signed in: ${signedIn ?: "No"}")
+        val firebaseUser = FirebaseAuth.getInstance().currentUser
+        Text("Email verification: ${if (firebaseUser?.isEmailVerified == true) "Verified" else "Not verified"}")
+        if (firebaseUser != null && firebaseUser.isEmailVerified != true) {
+            OutlinedButton(onClick = {
+                scope.launch {
+                    try {
+                        firebaseUser.sendEmailVerification().await()
+                        message = "Verification email sent to ${firebaseUser.email}. Open the link, then sign in again."
+                    } catch (e: Exception) { message = "Could not send verification email: ${e.localizedMessage}" }
+                }
+            }) { Text("Resend verification email") }
+        }
         Button(onClick={
             try {
                 val resId=context.resources.getIdentifier("default_web_client_id","string",context.packageName)
@@ -118,11 +130,15 @@ import java.util.UUID
                     val user=FirebaseAuth.getInstance().currentUser ?: error("Sign in first")
                     val token=user.getIdToken(false).await().token ?: error("No Firebase token")
                     BackendApi.baseUrl=url.trim()
-                    BackendApi.saveReportSubscription(token,"aksheysun@gmail.com")
-                    message="Report preference saved. Automated PDF email delivery is not active yet; scheduler setup is still required."
+                    val accountEmail = user.email?.trim().orEmpty()
+                    require(user.isEmailVerified && accountEmail.isNotBlank()) {
+                        "Verify the signed-in account email first. Then sign out and sign in again."
+                    }
+                    BackendApi.saveReportSubscription(token,accountEmail)
+                    message="Daily report preference saved for $accountEmail at 8:00 PM IST. Delivery is pending scheduler and email-provider activation."
                 } catch(e:Exception) { message="Email activation unavailable: ${e.localizedMessage}" }
             }
-        }) { Text("Save daily report preference (delivery pending)") }
+        }) { Text("Enable daily report for my verified email") }
         Text("Open the Basket tab and tap Check Live Prices to run a manual Rewalto comparison. The backend uses only the free monthly credit balance and stops if it cannot safely verify that allowance.", style=MaterialTheme.typography.bodySmall)
         Text(message, style=MaterialTheme.typography.bodyMedium)
         Text("Rewalto public sample and price observations are not retailer-owned APIs or guaranteed checkout quotes. No orders are placed by this app.", style=MaterialTheme.typography.bodySmall)
