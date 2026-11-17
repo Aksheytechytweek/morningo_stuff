@@ -1,0 +1,16 @@
+server:
+  port: ${PORT:8080}
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:file:./data/karnan;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:}
+    driver-class-name: ${DATABASE_DRIVER:org.h2.Driver}
+  sql:
+    init:
+      mode: always
+  jackson:
+    default-property-inclusion: non_null
+app:
+  jwt-secret: ${JWT_SECRET:local-development-secret-change-this-to-at-least-32-bytes}
+  jwt-expiry-hours: 72
