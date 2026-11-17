@@ -1,0 +1,27 @@
+name: Karnan Kudumbam Java 21 API
+on:
+  push:
+    branches: [ main, karnan-kudumbam-dev ]
+    paths:
+      - 'karnan-kudumbam/MadipakkamGroceryManager/backend-java/**'
+      - '.github/workflows/karnan-java21-auth-tests.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: karnan-kudumbam/MadipakkamGroceryManager/backend-java
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Test and package Java 21 API
+        run: mvn -B test package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: karnan-kudumbam-java21-api
+          path: karnan-kudumbam/MadipakkamGroceryManager/backend-java/target/*.jar
