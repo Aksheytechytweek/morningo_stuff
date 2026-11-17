@@ -1,7 +1,7 @@
 name: Karnan Kudumbam Backend Tests
 on:
   push:
-    branches: [ main, karnan-kudumbam-dev ]
+    branches: [ main, karnan-kudumbam-dev, karnan-kudumbam-complete-integration ]
     paths:
       - 'karnan-kudumbam/MadipakkamGroceryManager/backend/**'
       - '.github/workflows/karnan-backend-test.yml'
