@@ -92,8 +92,50 @@ async function rewaltoRoute(request,env,path) {
   }
   return json({error:'Not found'},404);
 }
+async function getDocument(env,token,path){
+  try{return await firestore(env,token,path);}catch(e){if(e.status===404)return null;throw e;}
+}
+function decodeFields(fields={}){return Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,fsDecode(v)]));}
+async function isHouseholdMember(env,token,householdId,uid){
+  if(householdId===uid)return true; // Backward-compatible owner household.
+  const member=await getDocument(env,token,`households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(uid)}`);
+  return Boolean(member);
+}
+async function householdRoute(request,env,user){
+  const token=request.headers.get('authorization').slice(7);
+  if(request.method==='POST'&&new URL(request.url).pathname==='/v1/households'){
+    const householdId=user.sub;
+    const existing=await getDocument(env,token,`households/${encodeURIComponent(householdId)}`);
+    if(!existing)await firestore(env,token,`households/${encodeURIComponent(householdId)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({ownerUid:user.sub,name:String(user.name??user.email??'Family').slice(0,80),createdAt:new Date().toISOString()})})});
+    const member=await getDocument(env,token,`households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(user.sub)}`);
+    if(!member)await firestore(env,token,`households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(user.sub)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({uid:user.sub,email:String(user.email??''),role:'owner',joinedAt:new Date().toISOString()})})});
+    return json({created:true,householdId,role:'owner'});
+  }
+  if(request.method==='POST'&&new URL(request.url).pathname==='/v1/households/invitations'){
+    const b=await request.json(),householdId=String(b.householdId??user.sub),email=String(b.email??'').trim().toLowerCase();
+    if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email))return json({error:'Enter a valid invite email.'},400);
+    if(!await isHouseholdMember(env,token,householdId,user.sub))return json({error:'Household membership required.'},403);
+    const owner=householdId===user.sub||decodeFields((await getDocument(env,token,`households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(user.sub)}`))?.fields).role==='owner';
+    if(!owner)return json({error:'Only the household owner can invite members.'},403);
+    const code=crypto.randomUUID().replaceAll('-','');
+    const expiresAt=new Date(Date.now()+7*86400000).toISOString();
+    await firestore(env,token,`households/${encodeURIComponent(householdId)}/invitations/${code}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({email,role:'member',status:'pending',createdBy:user.sub,createdAt:new Date().toISOString(),expiresAt})})});
+    return json({created:true,householdId,inviteCode:code,invitedEmail:email,expiresAt,delivery:'share-code-manually'});
+  }
+  if(request.method==='POST'&&new URL(request.url).pathname==='/v1/households/join'){
+    const b=await request.json(),householdId=String(b.householdId??''),code=String(b.inviteCode??'').trim();
+    if(!/^[A-Za-z0-9]{24,64}$/.test(code)||!householdId)return json({error:'Household ID and valid invitation code are required.'},400);
+    const invite=await getDocument(env,token,`households/${encodeURIComponent(householdId)}/invitations/${encodeURIComponent(code)}`);
+    const fields=decodeFields(invite?.fields);
+    if(!invite||fields.status!=='pending'||fields.email!==String(user.email??'').toLowerCase()||Date.parse(fields.expiresAt??'')<=Date.now())return json({error:'Invitation is invalid, expired, or addressed to another email.'},403);
+    await firestore(env,token,`households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(user.sub)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({uid:user.sub,email:String(user.email??''),role:'member',joinedAt:new Date().toISOString(),inviteCode:code})})});
+    await firestore(env,token,`households/${encodeURIComponent(householdId)}/invitations/${encodeURIComponent(code)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({...fields,status:'accepted',acceptedBy:user.sub,acceptedAt:new Date().toISOString()})})});
+    return json({joined:true,householdId,role:'member'});
+  }
+  return json({error:'Not found'},404);
+}
 async function expenseRoute(request,env,user){
-  const token=request.headers.get('authorization').slice(7),uid=encodeURIComponent(user.sub);
+  const token=request.headers.get('authorization').slice(7);
   if(request.method==='POST'){
     const {householdId,expenses}=await request.json();
     if(householdId!==user.sub)return json({error:'Household membership not configured for this account'},403);
@@ -101,7 +143,7 @@ async function expenseRoute(request,env,user){
     const writes=[];
     for(const x of expenses){
       if(!x?.id||!/^[A-Za-z0-9_-]{1,160}$/.test(String(x.id))||!/^\d{4}-\d{2}-\d{2}$/.test(String(x.date))||!Number.isFinite(Number(x.amount))||Number(x.amount)<0||Number(x.amount)>10000000)continue;
-      writes.push({update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/households/${uid}/expenses/${encodeURIComponent(String(x.id))}`,fields:fsFields({date:String(x.date),amount:Number(x.amount),category:String(x.category??'Other').slice(0,80),note:String(x.note??'').slice(0,500),payment:String(x.payment??'Cash').slice(0,40)})}});
+      writes.push({update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/households/${encodeURIComponent(String(householdId))}/expenses/${encodeURIComponent(String(x.id))}`,fields:fsFields({date:String(x.date),amount:Number(x.amount),category:String(x.category??'Other').slice(0,80),note:String(x.note??'').slice(0,500),payment:String(x.payment??'Cash').slice(0,40)})}});
     }
     if(writes.length)await firestore(env,token,':commit',{method:'POST',body:JSON.stringify({writes})});
     return json({synced:true,count:writes.length});
@@ -129,7 +171,7 @@ export default {
     try{
       const user=await auth(request,env);
       if(url.pathname.startsWith('/v1/rewalto/'))return await rewaltoRoute(request,env,url.pathname);
-      if(url.pathname==='/v1/expenses/sync')return await expenseRoute(request,env,user);
+      if(url.pathname.startsWith('/v1/households'))return await householdRoute(request,env,user);\n      if(url.pathname==='/v1/expenses/sync')return await expenseRoute(request,env,user);
       if(url.pathname==='/v1/report-subscription')return await reportRoute(request,env,user);
       if(url.pathname==='/internal/jobs/daily-report')return json({error:'Scheduled PDF email delivery is not enabled in this Worker build.'},503);
       return json({error:'Not found'},404);
