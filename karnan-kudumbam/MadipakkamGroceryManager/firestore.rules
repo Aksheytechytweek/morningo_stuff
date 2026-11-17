@@ -1,58 +1,83 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function verifiedEmail() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
     function isOwner(householdId) {
       return signedIn() && request.auth.uid == householdId;
     }
+
     function isMember(householdId) {
-      return signedIn() && exists(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid));
+      return signedIn()
+        && exists(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid));
     }
+
+    function invitation(householdId, inviteCode) {
+      return get(/databases/$(database)/documents/households/$(householdId)/invitations/$(inviteCode));
+    }
+
     match /households/{householdId} {
-      allow create: if isOwner(householdId) && request.resource.data.ownerUid == request.auth.uid;
+      allow create: if isOwner(householdId)
+        && request.resource.data.ownerUid == request.auth.uid;
       allow read: if isOwner(householdId) || isMember(householdId);
       allow update, delete: if isOwner(householdId);
+
       match /members/{memberUid} {
         allow read: if isOwner(householdId) || isMember(householdId);
         allow create: if signedIn() && (
-          (memberUid == request.auth.uid && isOwner(householdId) && request.resource.data.role == 'owner')
+          (memberUid == request.auth.uid
+            && isOwner(householdId)
+            && request.resource.data.role == 'owner')
           ||
           (memberUid == request.auth.uid
+            && verifiedEmail()
             && request.resource.data.role == 'member'
             && exists(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode))
-            && get(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode)).data.email == request.auth.token.email
-            && get(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode)).data.status == 'pending'\n            && get(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode)).data.expiresAt > request.time)
+            && invitation(householdId, request.resource.data.inviteCode).data.email == request.auth.token.email
+            && invitation(householdId, request.resource.data.inviteCode).data.status == 'pending'
+            && invitation(householdId, request.resource.data.inviteCode).data.expiresAt > request.time)
         );
         allow update, delete: if isOwner(householdId);
       }
+
       match /invitations/{inviteCode} {
         allow create: if isOwner(householdId)
           && request.resource.data.createdBy == request.auth.uid
           && request.resource.data.status == 'pending';
         allow read: if isOwner(householdId)
-          || (signedIn() && resource.data.email == request.auth.token.email);
-        allow update: if signedIn()
+          || (verifiedEmail() && resource.data.email == request.auth.token.email);
+        allow update: if verifiedEmail()
           && resource.data.email == request.auth.token.email
           && resource.data.status == 'pending'
+          && resource.data.expiresAt > request.time
           && request.resource.data.status == 'accepted'
           && request.resource.data.acceptedBy == request.auth.uid;
         allow delete: if isOwner(householdId);
       }
+
       match /expenses/{expenseId} {
         allow read, create, update, delete: if isOwner(householdId) || isMember(householdId);
       }
     }
+
     match /reportSubscriptions/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
-      allow create, update: if signedIn()
+      allow create, update: if verifiedEmail()
         && request.auth.uid == uid
-        && request.auth.token.email_verified == true
         && request.resource.data.email == request.auth.token.email;
       allow delete: if signedIn() && request.auth.uid == uid;
     }
+
     match /reportDeliveries/{deliveryId} {
       allow read, write: if false;
     }
+
     match /{document=**} {
       allow read, write: if false;
     }
