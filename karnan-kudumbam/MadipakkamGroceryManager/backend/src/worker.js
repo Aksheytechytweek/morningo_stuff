@@ -237,17 +237,19 @@ async function internalReportRoute(request,env){
   catch(e){return json({error:e.message??'Daily report job failed'},503);}
 }
 export default {
+  async scheduled(controller,env,ctx){ctx.waitUntil(sendDailyReports(env,new Date(controller.scheduledTime??Date.now())));},
   async fetch(request,env){
     const url=new URL(request.url);
     if(request.method==='OPTIONS')return new Response(null,{status:204,headers:BASE_HEADERS});
     if(url.pathname==='/health'&&request.method==='GET')return json({ok:true,service:'karnan-kudumbam-api',runtime:'cloudflare-workers'});
     try{
+      if(url.pathname==='/internal/jobs/daily-report')return await internalReportRoute(request,env);
       const user=await auth(request,env);
       if(url.pathname.startsWith('/v1/rewalto/'))return await rewaltoRoute(request,env,url.pathname);
       if(url.pathname.startsWith('/v1/households'))return await householdRoute(request,env,user);
             if(url.pathname==='/v1/expenses/sync')return await expenseRoute(request,env,user);
       if(url.pathname==='/v1/report-subscription')return await reportRoute(request,env,user);
-      if(url.pathname==='/internal/jobs/daily-report')return json({error:'Scheduled PDF email delivery is not enabled in this Worker build.'},503);
+
       return json({error:'Not found'},404);
     }catch(e){return json({error:e.message??'Request failed'},e.status??500);}
   }
