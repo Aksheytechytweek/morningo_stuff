@@ -1,35 +1,59 @@
 # Karnan Kudumbam — implementation and deployment status
 
-Updated 2026-11-17. Source, CI and deployment guidance are maintained on the integration branch. External service deployment and device acceptance remain owner-side tasks.
+Updated 2026-11-17. Work is on `karnan-kudumbam-complete-integration`; main has not been merged or changed.
 
-## Source implementation
-- Android Jetpack Compose app with local Room storage, grocery planning, expenses, basket, analysis and on-device PDF sharing.
-- Firebase email/password sign-in, email verification and HTTPS API client.
-- Cloudflare Worker API using the Fetch runtime and Firebase ID-token verification.
-- Household-scoped Firestore expense sync, owner-created email-bound invitation codes, verified-email joining, and owner/member checks.
-- Verified-email report preference storage. Actual scheduled email/PDF delivery is not active until the secured report endpoint and mail sender are configured.
-- Manual Rewalto catalogue/price observation endpoints with fail-closed free-credit checks and no paid fallback.
-- Firestore rules scoped to household owners and invited members.
-- Android debug build workflow watches the integration branch and app source changes. Daily email workflow skips safely until its secrets are configured.
+## Integrated in source
+- Android Jetpack Compose app with local storage, grocery planning, expenses, basket, analytics and PDF sharing.
+- Firebase Email/Password sign-in, email verification and ID-token API authentication.
+- Cloudflare Worker routes for household creation, owner invitations, verified-email joining and household-scoped expense sync.
+- Firestore rules for owner/member access, invitation validation, expense access and verified-email report preferences.
+- Rewalto server-side integration with bearer key, free-credit preflight and recheck before every product search; no paid fallback.
+- Retailer matching requires exact product/pack evidence, in-stock state and PIN-specific observation. BigBasket is accepted when its actual record carries the requested PIN; national/missing-PIN observations cannot complete the basket.
+- Scheduled report pipeline: verified-email subscription, household expense retrieval using a server-side Firebase service account, PDF generation, Resend attachment delivery, Firestore delivery ledger and secret-protected manual trigger.
+- Cloudflare Worker Cron checks subscriptions every minute and matches the requested Asia/Kolkata report time.
+- Repository-level CI workflows plus manual Firebase rules and Cloudflare Worker deployment workflows.
 
-## Owner setup still required
-1. **Firebase:** configure Email/Password authentication, Firestore and Android package `in.madipakkam.grocery`; place the project-specific `app/google-services.json` in the app folder. Never commit service-account credentials.
-2. **Firestore rules:** publish this branch's `firestore.rules` in Firebase Console before testing household features.
-3. **Cloudflare Worker:** set the project root to `karnan-kudumbam/MadipakkamGroceryManager/backend`; install with `npm install`, deploy with `npm run deploy`, and configure `FIREBASE_PROJECT_ID`. Add `REWALTO_API_KEY` only as a Worker secret if enabling price checks.
-4. **Daily report delivery:** deploy a secured report-job endpoint with persistent subscription storage and a verified mail sender. Only then add GitHub Actions repository secrets `REPORT_JOB_URL` and `DAILY_JOB_SECRET`. The scheduled workflow currently skips instead of failing when either secret is absent. The present Worker deliberately returns 503 for the report job; it must not be treated as a working mail service.
-5. **Rewalto:** configure the actual account key as a Worker secret, verify its documented free-credit balance shape and catalogue response, and test with free credits only. The endpoint blocks when free balance cannot be verified.
-6. **Acceptance:** run backend tests and Android build; test sign-in, email verification, household invitation with two separate verified accounts, expense sync, PIN-based basket observations and report delivery on real services.
-7. **Release:** configure signing securely outside Git, build a signed AAB/APK, then install and test on the Moto Edge 60 Pro.
+## External configuration required before production
+1. **GitHub repository secrets/variables**
+   - `FIREBASE_SERVICE_ACCOUNT_JSON` for the Firestore rules deployment workflow.
+   - `CLOUDFLARE_API_TOKEN` and repository variable `CLOUDFLARE_ACCOUNT_ID` for Worker deployment.
+   - `REPORT_JOB_URL` and `DAILY_JOB_SECRET` only for the optional manual report workflow; set the same random secret as a Cloudflare Worker secret.
+2. **Cloudflare Worker secrets/variables**
+   - `FIREBASE_SERVICE_ACCOUNT_JSON`: service account with Firestore data read/write permissions, used only by scheduled report generation.
+   - `RESEND_API_KEY`: Resend API key.
+   - `REPORT_FROM_EMAIL`: sender address verified in Resend.
+   - `DAILY_JOB_SECRET`: long random secret for the manual job route.
+   - `REWALTO_API_KEY`: optional Rewalto organisation API key. Do not enable price checks until the actual account balance shape and free allowance have been verified.
+   - `FIREBASE_PROJECT_ID=karnan-kudumbam` is set in Wrangler configuration.
+3. **Firebase**
+   - Enable Email/Password Authentication and Firestore.
+   - Publish this branch's `firestore.rules` using the manual GitHub deployment workflow.
+   - Keep the Android `google-services.json` project config in the app folder and out of service-account handling.
+4. **Rewalto**
+   - Validate the live `/v1/credits/balance` response and API permissions using the actual account.
+   - The public API contract documents bearer authentication, listing search and credit-based reads. Results remain dated public-page observations, not checkout quotes.
+5. **Release/device**
+   - Configure Android signing secrets outside Git, build a signed APK/AAB and install it on the Moto Edge 60 Pro.
+   - Test sign-in, email verification, two-account invitation/join, shared expense sync, report email and live Rewalto checks.
 
-## Not yet verified / not production-ready
-- Latest Worker deployment and Firestore rule publication.
-- Actual two-account household test against the live Firebase project.
-- Daily PDF email delivery: scheduler workflow exists, but the Worker endpoint, durable job storage and email provider are not active.
-- Rewalto account response, actual free-credit parsing and product data quality.
-- Retailer stock/pack matching and location-specific availability. Results are observations, not guaranteed checkout quotes; taxes, delivery, handling fees and final payable amounts are not supplied.
-- Signed release build and device acceptance.
+## Deployment workflows
+- Android debug build: `.github/workflows/karnan-kudumbam-android.yml`
+- Backend tests: `.github/workflows/karnan-kudumbam-backend.yml`
+- Firebase rules deployment (manual): `.github/workflows/karnan-kudumbam-deploy-firestore.yml`
+- Cloudflare Worker deployment (manual): `.github/workflows/karnan-kudumbam-deploy-worker.yml`
+- Daily report manual trigger (manual): `.github/workflows/karnan-kudumbam-daily-email.yml`
+
+## Not yet proven live
+- Worker has not been deployed from this branch to the user's Cloudflare account.
+- Firestore rules have not been published from this branch.
+- Household invitations have not been tested with two real Firebase accounts.
+- Resend delivery has not been verified; it requires a verified sender and the secrets above.
+- Rewalto key, free-credit balance shape, product results and PIN-specific availability have not been tested against the user's account.
+- No signed release has been built or installed on the Moto device.
+- CI success does not constitute production acceptance.
 
 ## Cost and security guardrails
-- No paid Cloudflare plan or paid Rewalto usage is assumed.
-- Never put API keys, service-account JSON, signing keys or scheduler secrets in Git, APK assets or chat.
-- No shopping orders are placed. Users must verify stock, PIN availability and final fees in the retailer app.
+- No paid Rewalto credit fallback is implemented.
+- No paid Cloudflare plan or email provider subscription is assumed.
+- Never commit service-account JSON, API keys, scheduler secrets or Android signing keys.
+- The app does not place retailer orders; final stock, delivery fees and checkout totals must be confirmed in the retailer app.
