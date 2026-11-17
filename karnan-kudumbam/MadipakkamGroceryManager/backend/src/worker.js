@@ -165,7 +165,7 @@ async function reportRoute(request,env,user){
   const token=request.headers.get('authorization').slice(7);
   if(!await isHouseholdMember(env,token,householdId,user.sub))return json({error:'Household membership required.'},403);
   await firestore(env,token,`reportSubscriptions/${encodeURIComponent(user.sub)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({email,enabled:Boolean(b.enabled??true),monthlyBudget:budget,reportTime:time,timeZone:'Asia/Kolkata',householdId})})});
-  return json({saved:true,email,enabled:Boolean(b.enabled??true),reportTime:time,timeZone:'Asia/Kolkata',deliveryStatus:'scheduled'});
+  return json({saved:true,email,enabled:Boolean(b.enabled??true),reportTime:time,timeZone:'Asia/Kolkata',deliveryStatus:env.FIREBASE_SERVICE_ACCOUNT_JSON&&env.RESEND_API_KEY&&env.REPORT_FROM_EMAIL?'scheduled':'pending-provider-setup'});
 }
 
 function base64Url(value){
@@ -237,7 +237,7 @@ async function internalReportRoute(request,env){
   catch(e){return json({error:e.message??'Daily report job failed'},503);}
 }
 export default {
-  async scheduled(controller,env,ctx){ctx.waitUntil(sendDailyReports(env,new Date(controller.scheduledTime??Date.now())));},
+  async scheduled(controller,env,ctx){if(!env.FIREBASE_SERVICE_ACCOUNT_JSON||!env.RESEND_API_KEY||!env.REPORT_FROM_EMAIL)return;ctx.waitUntil(sendDailyReports(env,new Date(controller.scheduledTime??Date.now())));},
   async fetch(request,env){
     const url=new URL(request.url);
     if(request.method==='OPTIONS')return new Response(null,{status:204,headers:BASE_HEADERS});
