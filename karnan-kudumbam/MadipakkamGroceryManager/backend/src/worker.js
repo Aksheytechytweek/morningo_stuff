@@ -1,4 +1,5 @@
 import { verifyFirebaseIdToken } from './firebase-auth.js';
+import { createExpenseReportPdf, istDateTime, bytesToBase64 } from './reports.js';
 import { extractFreeCredits, normaliseSearchResults, buildProviderSummaries, maximumFreeCreditsNeeded } from './rewalto.js';
 
 const BASE_HEADERS = {
@@ -158,12 +159,82 @@ async function expenseRoute(request,env,user){
 }
 async function reportRoute(request,env,user){
   if(request.method!=='PUT')return json({error:'Method not allowed'},405);
-  const b=await request.json(),email=String(b.email??'').trim().toLowerCase(),verified=String(user.email??'').trim().toLowerCase(),time=String(b.reportTime??'20:00'),budget=Number(b.monthlyBudget??15000);
+  const b=await request.json(),email=String(b.email??'').trim().toLowerCase(),verified=String(user.email??'').trim().toLowerCase(),time=String(b.reportTime??'20:00'),budget=Number(b.monthlyBudget??15000),householdId=String(b.householdId??user.sub);
   if(user.email_verified!==true||!verified||email!==verified)return json({error:'Use the verified email address on the signed-in account.'},403);
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)||!Number.isFinite(budget)||budget<=0)return json({error:'Invalid report email, time or monthly budget.'},400);
   const token=request.headers.get('authorization').slice(7);
-  await firestore(env,token,`reportSubscriptions/${encodeURIComponent(user.sub)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({email,enabled:Boolean(b.enabled??true),monthlyBudget:budget,reportTime:time,timeZone:'Asia/Kolkata'})})});
-  return json({saved:true,email,enabled:Boolean(b.enabled??true),reportTime:time,timeZone:'Asia/Kolkata',deliveryStatus:'pending-scheduler-setup'});
+  if(!await isHouseholdMember(env,token,householdId,user.sub))return json({error:'Household membership required.'},403);
+  await firestore(env,token,`reportSubscriptions/${encodeURIComponent(user.sub)}`,{method:'PATCH',body:JSON.stringify({fields:fsFields({email,enabled:Boolean(b.enabled??true),monthlyBudget:budget,reportTime:time,timeZone:'Asia/Kolkata',householdId})})});
+  return json({saved:true,email,enabled:Boolean(b.enabled??true),reportTime:time,timeZone:'Asia/Kolkata',deliveryStatus:'scheduled'});
+}
+
+function base64Url(value){
+  const bytes=typeof value==='string'?new TextEncoder().encode(value):value;
+  let binary='';for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+}
+async function firebaseAdminToken(env){
+  if(!env.FIREBASE_SERVICE_ACCOUNT_JSON)throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON is not configured');
+  const account=JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  if(!account.client_email||!account.private_key)throw new Error('Firebase service account secret is invalid');
+  const now=Math.floor(Date.now()/1000);
+  const header=base64Url(JSON.stringify({alg:'RS256',typ:'JWT'}));
+  const claim=base64Url(JSON.stringify({iss:account.client_email,scope:'https://www.googleapis.com/auth/datastore',aud:'https://oauth2.googleapis.com/token',iat:now,exp:now+3600}));
+  const unsigned=header+'.'+claim;
+  const pem=account.private_key.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g,'');
+  const der=Uint8Array.from(atob(pem),ch=>ch.charCodeAt(0));
+  const key=await crypto.subtle.importKey('pkcs8',der,{name:'RSASSA-PKCS1-v1_5',hash:'SHA-256'},false,['sign']);
+  const signature=await crypto.subtle.sign('RSASSA-PKCS1-v1_5',key,new TextEncoder().encode(unsigned));
+  const assertion=unsigned+'.'+base64Url(new Uint8Array(signature));
+  const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'urn:ietf:params:oauth:grant-type:jwt-bearer',assertion})});
+  const data=await response.json();if(!response.ok||!data.access_token)throw new Error('Firebase service-account token exchange failed');
+  return data.access_token;
+}
+async function adminFirestore(env,token,path,init={}){
+  const url=`https://firestore.googleapis.com/v1/projects/${encodeURIComponent(env.FIREBASE_PROJECT_ID)}/databases/(default)/documents/${path}`;
+  const response=await fetch(url,{...init,headers:{authorization:`Bearer ${token}`,'content-type':'application/json',...(init.headers??{})}});
+  const raw=await response.text();let data={};try{data=raw?JSON.parse(raw):{};}catch{}
+  if(!response.ok)throw Object.assign(new Error(data.error?.message??`Firestore admin HTTP ${response.status}`),{status:response.status});
+  return data;
+}
+async function markDelivery(env,token,id,fields,create=false){
+  const path='reportDeliveries/'+encodeURIComponent(id);
+  return adminFirestore(env,token,create?'reportDeliveries?documentId='+encodeURIComponent(id):path,{method:create?'POST':'PATCH',body:JSON.stringify({fields:fsFields(fields)})});
+}
+async function sendDailyReports(env,at=new Date()){
+  if(!env.FIREBASE_PROJECT_ID||!env.FIREBASE_SERVICE_ACCOUNT_JSON||!env.RESEND_API_KEY||!env.REPORT_FROM_EMAIL)throw new Error('Daily report requires Firebase service account, Resend API key and verified sender configuration');
+  const {date,time}=istDateTime(at),token=await firebaseAdminToken(env);
+  const subscriptions=await adminFirestore(env,token,'reportSubscriptions?pageSize=1000');
+  const sent=[],skipped=[],failed=[];
+  for(const doc of subscriptions.documents??[]){
+    const sub=decodeFields(doc.fields),uid=doc.name.split('/').pop();
+    if(!sub.enabled||sub.reportTime!==time||!sub.email)continue;
+    const householdId=String(sub.householdId??uid);
+    const deliveryId='daily_'+uid+'_'+date.replace(/-/g,'')+'_'+time.replace(':','');
+    let prior=null;try{prior=await adminFirestore(env,token,'reportDeliveries/'+encodeURIComponent(deliveryId));}catch(e){if(e.status!==404)throw e;}
+    if(decodeFields(prior?.fields).status==='sent'){skipped.push(uid);continue;}
+    try{
+      const expenses=await adminFirestore(env,token,`households/${encodeURIComponent(householdId)}/expenses?pageSize=1000`);
+      const rows=(expenses.documents??[]).map(item=>({id:item.name.split('/').pop(),...decodeFields(item.fields)}));
+      const pdf=createExpenseReportPdf({date,email:sub.email,budget:sub.monthlyBudget??15000,expenses:rows});
+      const attachment=bytesToBase64(pdf);
+      await markDelivery(env,token,deliveryId,{uid,householdId,email:sub.email,date,reportTime:time,status:'sending',updatedAt:new Date().toISOString()},!prior);
+      const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({from:env.REPORT_FROM_EMAIL,to:[sub.email],subject:`Karnan Kudumbam daily report - ${date}`,html:`<p>Your household expense report for ${date} is attached.</p><p>This report contains recorded expenses only; retailer prices are observations, not checkout quotes.</p>`,attachments:[{filename:`karnan-kudumbam-${date}.pdf`,content:attachment}]})});
+      const result=await response.json();if(!response.ok)throw new Error(result.message??'Email provider rejected the report');
+      await markDelivery(env,token,deliveryId,{uid,householdId,email:sub.email,date,reportTime:time,status:'sent',providerId:result.id??'',sentAt:new Date().toISOString()});
+      sent.push(uid);
+    }catch(e){
+      try{await markDelivery(env,token,deliveryId,{uid,householdId,email:sub.email,date,reportTime:time,status:'failed',error:String(e.message??e).slice(0,300),updatedAt:new Date().toISOString()},!prior);}catch{}
+      failed.push({uid,error:String(e.message??e).slice(0,180)});
+    }
+  }
+  return {date,time,sent:sent.length,skipped:skipped.length,failed};
+}
+async function internalReportRoute(request,env){
+  if(!env.DAILY_JOB_SECRET||request.headers.get('x-job-secret')!==env.DAILY_JOB_SECRET)return json({error:'Unauthorized'},401);
+  if(request.method!=='POST')return json({error:'Method not allowed'},405);
+  try{return json({ok:true,...await sendDailyReports(env)});}
+  catch(e){return json({error:e.message??'Daily report job failed'},503);}
 }
 export default {
   async fetch(request,env){
