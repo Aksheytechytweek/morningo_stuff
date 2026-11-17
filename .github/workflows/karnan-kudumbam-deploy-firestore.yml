@@ -1,0 +1,21 @@
+name: Deploy Karnan Kudumbam Firestore Rules
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Authenticate to Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      - name: Deploy Firestore rules
+        working-directory: karnan-kudumbam/MadipakkamGroceryManager
+        env:
+          FIREBASE_PROJECT_ID: karnan-kudumbam
+        run: |
+          npx --yes firebase-tools@latest deploy --only firestore:rules --project "$FIREBASE_PROJECT_ID" --non-interactive
