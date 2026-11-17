@@ -26,7 +26,9 @@ jobs:
       - name: Accept Android SDK licences and install platform
         shell: bash
         run: |
+          set +o pipefail
           yes | "$SDKMANAGER" --licenses >/dev/null
+          set -o pipefail
           "$SDKMANAGER" 'platforms;android-35' 'build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
