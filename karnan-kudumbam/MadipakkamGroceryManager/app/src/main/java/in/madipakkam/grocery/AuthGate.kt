@@ -34,7 +34,7 @@ fun AuthGate(content: @Composable () -> Unit) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     if (currentUser != null) {
@@ -55,7 +55,7 @@ fun AuthGate(content: @Composable () -> Unit) {
             Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                 Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(if (register) "Create your account" else "Welcome back", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("Sign in securely with email and password. No OTP is required.", color = Color.Gray)
+                    Text("Sign in securely with email and password. New accounts receive an email verification link.", color = Color.Gray)
                     if (register) OutlinedTextField(name, { name = it }, label = { Text("Full name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(
                         email, { email = it.trim() }, label = { Text("Email address") },
@@ -68,12 +68,12 @@ fun AuthGate(content: @Composable () -> Unit) {
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                     )
-                    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     Button(
                         onClick = {
-                            error = ""
+                            errorMessage = ""
                             if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() || password.length < 8 || (register && name.isBlank())) {
-                                error = "Enter a valid email. Password must contain at least 8 characters."
+                                errorMessage = "Enter a valid email. Password must contain at least 8 characters."
                                 return@Button
                             }
                             busy = true
@@ -82,6 +82,7 @@ fun AuthGate(content: @Composable () -> Unit) {
                                     val user = if (register) {
                                         val result = auth.createUserWithEmailAndPassword(email, password).await()
                                         if (name.isNotBlank()) result.user?.updateProfile(userProfileChangeRequest { displayName = name.trim() })?.await()
+                                        result.user?.sendEmailVerification()?.await()
                                         result.user
                                     } else {
                                         auth.signInWithEmailAndPassword(email, password).await().user
@@ -90,7 +91,7 @@ fun AuthGate(content: @Composable () -> Unit) {
                                     SessionStore.save(context, idToken)
                                     currentUser = user
                                 } catch (e: Exception) {
-                                    error = when {
+                                    errorMessage = when {
                                         e.message?.contains("CONFIGURATION_NOT_FOUND", true) == true -> "Enable Email/Password in Firebase Authentication."
                                         else -> e.localizedMessage ?: "Authentication failed. Please try again."
                                     }
@@ -110,7 +111,7 @@ fun AuthGate(content: @Composable () -> Unit) {
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Text("Use a unique password. Account recovery is handled by Firebase.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+            Text("Use a unique password. Verify your email before enabling scheduled reports.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
