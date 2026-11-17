@@ -1,27 +1,58 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedInAs(uid) {
-      return request.auth != null && request.auth.uid == uid;
+    function signedIn() { return request.auth != null; }
+    function isOwner(householdId) {
+      return signedIn() && request.auth.uid == householdId;
     }
-
-    // Initial release: one Firebase UID owns one household.
-    match /households/{uid}/expenses/{expenseId} {
-      allow read, create, update, delete: if signedInAs(uid);
+    function isMember(householdId) {
+      return signedIn() && exists(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid));
     }
-
+    match /households/{householdId} {
+      allow create: if isOwner(householdId) && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if isOwner(householdId) || isMember(householdId);
+      allow update, delete: if isOwner(householdId);
+      match /members/{memberUid} {
+        allow read: if isOwner(householdId) || isMember(householdId);
+        allow create: if signedIn() && (
+          (memberUid == request.auth.uid && isOwner(householdId) && request.resource.data.role == 'owner')
+          ||
+          (memberUid == request.auth.uid
+            && request.resource.data.role == 'member'
+            && exists(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode))
+            && get(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode)).data.email == request.auth.token.email
+            && get(/databases/$(database)/documents/households/$(householdId)/invitations/$(request.resource.data.inviteCode)).data.status == 'pending')
+        );
+        allow update, delete: if isOwner(householdId);
+      }
+      match /invitations/{inviteCode} {
+        allow create: if isOwner(householdId)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.status == 'pending';
+        allow read: if isOwner(householdId)
+          || (signedIn() && resource.data.email == request.auth.token.email);
+        allow update: if signedIn()
+          && resource.data.email == request.auth.token.email
+          && resource.data.status == 'pending'
+          && request.resource.data.status == 'accepted'
+          && request.resource.data.acceptedBy == request.auth.uid;
+        allow delete: if isOwner(householdId);
+      }
+      match /expenses/{expenseId} {
+        allow read, create, update, delete: if isOwner(householdId) || isMember(householdId);
+      }
+    }
     match /reportSubscriptions/{uid} {
-      allow read: if signedInAs(uid);
-      allow create, update: if signedInAs(uid)
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn()
+        && request.auth.uid == uid
         && request.auth.token.email_verified == true
         && request.resource.data.email == request.auth.token.email;
-      allow delete: if signedInAs(uid);
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
-
     match /reportDeliveries/{deliveryId} {
       allow read, write: if false;
     }
-
     match /{document=**} {
       allow read, write: if false;
     }
