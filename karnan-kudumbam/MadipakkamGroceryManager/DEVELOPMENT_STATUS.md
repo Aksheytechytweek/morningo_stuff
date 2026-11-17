@@ -1,62 +1,35 @@
 # Karnan Kudumbam — implementation and deployment status
 
-Updated 2026-11-12. This is source code, **not a compiled/tested APK**.
+Updated 2026-11-17. Git source and CI configuration are updated; deployment and device testing are still pending.
 
-## Implemented in source
+## Source implementation
+- Android Jetpack Compose app with local Room storage, grocery planning, expenses, basket, analysis and on-device PDF sharing.
+- Optional Firebase Google sign-in UI and HTTPS API client.
+- Cloudflare Worker API using the Fetch runtime; no Express listener, Docker runtime or Firebase Admin service-account key.
+- Firebase ID-token verification using Google's Secure Token signing keys.
+- Owner-scoped Firestore REST expense upload/download.
+- Verified-email report preference storage. Scheduled email/PDF delivery is intentionally not active.
+- Manual Rewalto catalogue/price observation endpoints with free-credit checks and no paid fallback.
+- Firestore rules scoped to the authenticated user's own household data.
+- Root-level GitHub Actions workflows for backend tests and Android debug APK builds.
 
-- Kotlin Jetpack Compose household dashboard, expenses, groceries, price notebook, basket, analysis and PDF sharing.
-- Room persistence layer and one-time import of existing `madipakkam_grocery.db` SQLite records; legacy database retained for recovery.
-- Cloud screen for optional Google/Firebase sign-in, HTTPS backend URL, PIN, upload/download expense sync, report subscription and Rewalto public free-sample check.
-- Basket tab includes a manual Check Live Prices loader and Rewalto result cards; requests are user-triggered only.
-- Firebase ID-token-protected Express endpoints; Firestore backend; owner-scoped household data.
-- Single-app basket rules are enforced: every required item must have a matching pack and known in-stock, PIN-specific observation from the same platform; no split orders. Final checkout fees are not yet available from Rewalto.
-- Daily 20:00 IST scheduler workflow, Resend PDF email backend, duplicate-send guard.
-- Ten Node.js unit tests pass (`cd backend && npm test` or `node --test`).
+## Required owner setup
+1. Cloudflare Worker: root directory `karnan-kudumbam/MadipakkamGroceryManager/backend`; build command `npm install`; deploy command `npm run deploy`.
+2. Add `FIREBASE_PROJECT_ID` as a Worker variable. Add `REWALTO_API_KEY` as a Worker secret only if enabling manual price checks.
+3. Configure Firebase Authentication (Google provider), Firestore, Android package `in.madipakkam.grocery`, and a project-specific `app/google-services.json`. Do not commit the JSON file if it contains project configuration you want private; never commit service-account credentials.
+4. Deploy `firestore.rules` to the Firebase project.
+5. Run GitHub Actions and inspect backend test and APK build results. Install the debug APK and test on a real Android device.
 
-## External setup REQUIRED (not complete)
+## Explicitly not ready
+- No Cloudflare deployment has been performed by this commit.
+- No Firebase project ID, Google services configuration, Rewalto key or other secrets have been supplied/configured.
+- Scheduled PDF email delivery is not enabled; the API only stores the preference and reports pending scheduler setup.
+- Rewalto has not been validated against the owner's actual account response. It is manual-only, free-credit guarded, and never uses a paid fallback.
+- Multi-member household sharing is not enabled; the first release is one Firebase UID per household.
+- No signed release APK/AAB or device acceptance test has been completed.
 
-1. **Android build:** Install Android Studio / Android SDK 35 and build. This environment has no Android SDK or Gradle executable; no APK has been compiled or device-tested.
-2. **Firebase:** Create a Firebase project (Spark is sufficient for authentication and modest Firestore usage), enable Google sign-in, register Android package `in.madipakkam.grocery`, add `app/google-services.json`, configure Google Services Gradle plugin (see below), and deploy backend with Firebase Admin application-default credentials. Without this, sign-in/sync are disabled.
-3. **Email:** Verify a sending domain with Resend, supply `RESEND_API_KEY`, `REPORT_FROM_EMAIL`, and `DAILY_JOB_SECRET` to the backend. Deploy backend, configure GitHub Actions secrets `REPORT_JOB_URL` and `DAILY_JOB_SECRET`, and enable email subscription by signing in as the verified recipient `aksheysun@gmail.com`. Scheduled GitHub Actions may be delayed; use managed cloud scheduler for precise delivery. No email was sent.
-4. **Rewalto price integration:** Backend adapter, free-credit preflight, per-search free-balance recheck, manual-only API route and Android Check Live Prices loader/results are implemented. Still needs a Rewalto free account/API key, backend deployment and real-response validation. No paid fallback exists. Provider results are timestamped public-page observations, not guaranteed live checkout prices; BigBasket national records are excluded from PIN-specific eligibility. Delivery fees/final checkout totals are not available.
-5. **Cloud sync:** Initial manual upload/download is implemented; production-grade continuous two-way sync, conflict resolution and multi-device de-duplication remain to be hardened. Use one signed-in household account for this build.
-6. **Testing:** Run Android build and on-device UI tests, auth integration tests, email sandbox tests and real provider acceptance tests before production use.
-
-## Firebase Android setup
-
-Add to root `build.gradle.kts` plugins:
-
-```kotlin
-id("com.google.gms.google-services") version "4.4.2" apply false
-```
-
-Add to `app/build.gradle.kts` plugins:
-
-```kotlin
-id("com.google.gms.google-services")
-```
-
-Put the project-specific `google-services.json` in `app/` (do not commit secrets or service-account JSON). Configure SHA-1/SHA-256 signing fingerprints for Google login. Set deployed HTTPS backend URL from Cloud tab.
-
-## Security
-
-- No Resend, Rewalto or Firebase Admin secrets in APK.
-- Firestore client reads/writes denied; authenticated backend mediates access.
-- Recipient must match the signed-in Firebase verified email before enabling automatic delivery.
-- Backend scheduler secret is required for daily report dispatch.
-- No shopping orders are placed by the application.
-
-## Known issues / next engineering work
-
-- UI currently calls compatibility Room facade from Compose; move to ViewModel + Flow and background repositories for production-grade responsiveness.
-- Legacy import runs once; review date/time handling and large datasets.
-- Download sync has a simple per-device imported-ID set; production sync should use stable entity IDs and server revisions for safe multi-device merges.
-- Report delivery idempotency after uncertain network failures requires provider-level idempotency/reconciliation.
-- Firebase/Resend/provider credentials and deployment are controlled by account owner, not by this source package.
-
-
-### Rewalto free-only policy
-- Free allowance advertised by Rewalto: 1,000 API credits/month, no card.
-- Worst-case cap: one listing-search request per basket item, 10 records maximum per request (maximum one credit each). Basket capped at 20 items.
-- Server refuses if free balance is insufficient or cannot be parsed, and rechecks before each search. Paid usage is never an allowed fallback.
-- Live provider integration has not been tested with a real API key; configure `REWALTO_API_KEY` on the backend only.
+## Cost and security guardrails
+- No paid Cloudflare plan is assumed; provider free quotas and terms can change.
+- No real `.env`, Firebase service-account JSON, Resend key, Rewalto key or scheduler secret in Git or APK.
+- No shopping orders are placed.
+- Price observations are not guaranteed live checkout quotes; users must verify stock, PIN availability and final fees in the retailer app.
