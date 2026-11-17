@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { validateFirebaseClaims } from '../src/firebase-auth.js';
+const projectId='karnan-kudumbam-test',now=1800000000;
+const valid={aud:projectId,iss:`https://securetoken.google.com/${projectId}`,exp:now+3600,iat:now-60,auth_time:now-120,sub:'firebase-user-123'};
+test('accepts valid Firebase token claims',()=>assert.equal(validateFirebaseClaims(valid,projectId,now).sub,valid.sub));
+test('rejects wrong audience',()=>assert.throws(()=>validateFirebaseClaims({...valid,aud:'other'},projectId,now),/audience/));
+test('rejects wrong issuer',()=>assert.throws(()=>validateFirebaseClaims({...valid,iss:'https://issuer.invalid'},projectId,now),/issuer/));
+test('rejects expired token',()=>assert.throws(()=>validateFirebaseClaims({...valid,exp:now},projectId,now),/expired/));
+test('rejects future issued-at',()=>assert.throws(()=>validateFirebaseClaims({...valid,iat:now+100},projectId,now),/issued-at/));
+test('rejects missing subject',()=>assert.throws(()=>validateFirebaseClaims({...valid,sub:''},projectId,now),/user ID/));
