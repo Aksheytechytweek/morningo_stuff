@@ -2,7 +2,7 @@ name: Karnan Kudumbam Android Debug APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main, karnan-kudumbam-dev ]
+    branches: [ main, karnan-kudumbam-dev, karnan-kudumbam-complete-integration ]
     paths:
       - 'karnan-kudumbam/MadipakkamGroceryManager/**'
       - '.github/workflows/karnan-android-build.yml'
