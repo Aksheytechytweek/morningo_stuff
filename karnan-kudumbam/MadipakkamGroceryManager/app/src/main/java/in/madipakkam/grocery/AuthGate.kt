@@ -105,7 +105,7 @@ fun AuthGate(content: @Composable () -> Unit) {
                         if (busy) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
                         else Text(if (register) "Create account" else "Login")
                     }
-                    TextButton(onClick = { register = !register; error = "" }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    TextButton(onClick = { register = !register; errorMessage = "" }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                         Text(if (register) "Already registered? Login" else "New here? Create account", color = AuthGreen)
                     }
                 }
