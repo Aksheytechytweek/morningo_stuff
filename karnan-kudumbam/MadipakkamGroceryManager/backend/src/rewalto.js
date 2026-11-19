@@ -88,10 +88,17 @@ export function normaliseSearchResults(payload, requestLine) {
     const latest = row.latest ?? row.latestObservation ?? row.observation ?? {};
     const retailer = normaliseRetailer(firstDefined(row.retailer, row.retailerId, row.source, row.app));
     const title = String(firstDefined(row.title, row.name, row.productName, row.displayName, '')).trim();
-    const packSize = String(firstDefined(row.packSize, row.pack_size, row.size, row.variant, '')).trim();
-    const rawPrice = firstDefined(latest.pricePaise, latest.sellingPricePaise, latest.price, row.pricePaise, row.price, row.sellingPricePaise);
-    const explicitRupees = latest.priceRupees !== undefined || row.priceRupees !== undefined;
-    const price = toRupees(firstDefined(latest.priceRupees, row.priceRupees, rawPrice), explicitRupees);
+    const packSize = String(firstDefined(row.packSizeRaw, row.packSize, row.pack_size, row.size, row.variant, '')).trim();
+    // Current Rewalto contract (0.203+) uses minor currency units (paise).
+    // Keep legacy paise/rupee fields for already-deployed responses.
+    const minorPrice = firstDefined(latest.priceMinor, latest.sellingPriceMinor, row.priceMinor, row.sellingPriceMinor);
+    const rupeePrice = firstDefined(latest.priceRupees, row.priceRupees);
+    const legacyPaisePrice = firstDefined(latest.pricePaise, latest.sellingPricePaise, latest.price, row.pricePaise, row.price, row.sellingPricePaise);
+    const price = rupeePrice !== undefined
+      ? toRupees(rupeePrice, true)
+      : minorPrice !== undefined
+        ? toRupees(minorPrice, false)
+        : toRupees(legacyPaisePrice, false);
     const checkedAt = firstDefined(latest.readAt, latest.observedAt, latest.checkedAt, latest.collectedAt, row.readAt, row.updatedAt, null);
     const suppliedNow = requestLine.now ? Date.parse(requestLine.now) : Date.now();
     const stock = stockState(firstDefined(latest.stockState, latest.stock, latest.availability, latest.inStock, row.stockState, row.stock), checkedAt, Number.isFinite(suppliedNow) ? suppliedNow : Date.now());
