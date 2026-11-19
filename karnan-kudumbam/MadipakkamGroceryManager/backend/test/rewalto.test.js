@@ -11,6 +11,7 @@ test('free balance parser fails closed and never treats total balance as free', 
 test('retailer names are normalised to supported platforms', () => {
   assert.equal(normaliseRetailer('swiggy_instamart').id, 'swiggy_instamart');
   assert.equal(normaliseRetailer('Flipkart Minutes').id, 'flipkart_minutes');
+  assert.equal(normaliseRetailer('flipkart').id, 'flipkart_minutes');
   assert.equal(normaliseRetailer('unknown'), null);
 });
 
@@ -73,11 +74,15 @@ test('national BigBasket readings cannot complete a PIN-specific basket', () => 
 });
 
 test('PIN-matched BigBasket observations can qualify for a complete basket', () => {
-  const rows = normaliseSearchResults({ listings: [{
-    retailer: 'bigbasket', title: 'Amul Milk 500 ml', packSize: '500 ml', price: 3200,
-    latest: { stockState: 'in_stock', readAt: '2026-11-17T10:00:00Z', pincode: '600091' }
+  const lines = [{ id: '1', name: 'Amul Milk', quantity: '500 ml' }];
+  const rows = normaliseSearchResults({ data: [{
+    retailer: 'bigbasket', title: 'Amul Milk 500 ml', packSizeRaw: '500 ml',
+    latest: { priceMinor: 3200, inStock: true, observedAt: '2026-11-17T10:00:00Z', pincode: '600091' }
   }] }, { id: '1', name: 'Amul Milk', quantity: '500 ml', pincode: '600091', now: '2026-11-17T10:30:00Z' });
+  const result = buildProviderSummaries(lines, rows).find((item) => item.providerId === 'bigbasket');
   assert.equal(rows[0].locationSpecific, true);
+  assert.equal(result.complete, true);
+  assert.equal(result.locationCaveat, null);
 });
 
 test('stale or undated stock is unknown and cannot qualify for a provider basket', () => {
