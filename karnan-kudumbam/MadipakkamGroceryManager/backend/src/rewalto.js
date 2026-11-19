@@ -2,7 +2,7 @@ const RETAILERS = [
   { id: 'zepto', label: 'Zepto', aliases: ['zepto'] },
   { id: 'blinkit', label: 'Blinkit', aliases: ['blinkit'] },
   { id: 'swiggy_instamart', label: 'Swiggy Instamart', aliases: ['swiggy_instamart', 'instamart', 'swiggy instamart'] },
-  { id: 'flipkart_minutes', label: 'Flipkart Minutes', aliases: ['flipkart_minutes', 'flipkart minutes', 'minutes'] },
+  { id: 'flipkart_minutes', label: 'Flipkart Minutes', aliases: ['flipkart_minutes', 'flipkart minutes', 'flipkart', 'minutes'] },
   { id: 'bigbasket', label: 'BigBasket', aliases: ['bigbasket', 'big basket', 'bbnow'] }
 ];
 
