@@ -35,6 +35,7 @@ fun AuthGate(content: @Composable () -> Unit) {
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+    var statusMessage by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     if (currentUser != null) {
@@ -58,7 +59,7 @@ fun AuthGate(content: @Composable () -> Unit) {
                     Text("Sign in securely with email and password. New accounts receive an email verification link.", color = Color.Gray)
                     if (register) OutlinedTextField(name, { name = it }, label = { Text("Full name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(
-                        email, { email = it.trim() }, label = { Text("Email address") },
+                        email, { email = it.trim(); errorMessage = ""; statusMessage = "" }, label = { Text("Email address") },
                         modifier = Modifier.fillMaxWidth(), singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
                     )
@@ -68,10 +69,46 @@ fun AuthGate(content: @Composable () -> Unit) {
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                     )
+                    if (!register) {
+                        TextButton(
+                            onClick = {
+                                errorMessage = ""
+                                statusMessage = ""
+                                if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                                    errorMessage = "Enter your registered email address first."
+                                    return@TextButton
+                                }
+                                busy = true
+                                scope.launch {
+                                    try {
+                                        auth.sendPasswordResetEmail(email.trim()).await()
+                                        // Keep the response neutral so account existence is not disclosed.
+                                        statusMessage = "If an account exists for this email, Firebase has sent a password-reset link. Check your inbox and spam folder."
+                                    } catch (e: Exception) {
+                                        errorMessage = when {
+                                            e.message?.contains("CONFIGURATION_NOT_FOUND", true) == true ->
+                                                "Password reset is unavailable: check Firebase Authentication configuration."
+                                            e.message?.contains("NETWORK", true) == true ->
+                                                "Network error. Check your connection and try again."
+                                            else -> "Could not send the reset email. Check the address and try again."
+                                        }
+                                    } finally {
+                                        busy = false
+                                    }
+                                }
+                            },
+                            enabled = !busy,
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Forgot password?", color = AuthGreen)
+                        }
+                    }
                     if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    if (statusMessage.isNotBlank()) Text(statusMessage, color = AuthGreen, style = MaterialTheme.typography.bodySmall)
                     Button(
                         onClick = {
                             errorMessage = ""
+                            statusMessage = ""
                             if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() || password.length < 8 || (register && name.isBlank())) {
                                 errorMessage = "Enter a valid email. Password must contain at least 8 characters."
                                 return@Button
@@ -105,7 +142,7 @@ fun AuthGate(content: @Composable () -> Unit) {
                         if (busy) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
                         else Text(if (register) "Create account" else "Login")
                     }
-                    TextButton(onClick = { register = !register; errorMessage = "" }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    TextButton(onClick = { register = !register; errorMessage = ""; statusMessage = "" }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
                         Text(if (register) "Already registered? Login" else "New here? Create account", color = AuthGreen)
                     }
                 }
