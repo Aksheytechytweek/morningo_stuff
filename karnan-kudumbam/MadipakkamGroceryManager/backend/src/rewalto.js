@@ -145,7 +145,7 @@ export function buildProviderSummaries(lines, observations) {
       productSubtotal: subtotal === null ? null : Math.round(subtotal * 100) / 100,
       finalPayable: null,
       checkoutFeesIncluded: false,
-      locationCaveat: provider.id === 'bigbasket' ? 'Rewalto labels BigBasket readings as national, not PIN-specific; verify in the app.' : null,
+      locationCaveat: null, // PIN eligibility is decided per observation via locationSpecific.
       items: selected.filter(Boolean)
     };
   });
