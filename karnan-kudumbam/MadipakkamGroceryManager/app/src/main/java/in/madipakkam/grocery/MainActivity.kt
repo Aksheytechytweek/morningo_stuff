@@ -65,7 +65,7 @@ class MainActivity : ComponentActivity() {
     val spent = expenses.sumOf { it.amount }
     val planned = 12500.0
     Scaffold(containerColor = Pale, topBar = {
-        Column(Modifier.background(Color.White).padding(horizontal = 20.dp, vertical = 16.dp)) {
+        Column(Modifier.background(Color.White).statusBarsPadding().padding(horizontal = 20.dp, vertical = 16.dp)) {
             Text("KARNAN KUDUMBAM  •  கர்ணன் குடும்பம்", color = Green, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             Text("Family & Grocery Manager", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF173B2B))
             Text("Madipakkam 600091  •  3 adults  •  Offline-first", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
