@@ -49,7 +49,7 @@ object BackendApi {
 
     private suspend fun get(path: String, idToken: String): JSONObject = withContext(Dispatchers.IO) {
         val root = baseUrl.trimEnd('/')
-        require(root.startsWith("https://")) { "Backend HTTPS URL has not been configured." }
+        require(root.startsWith("https://")) { "Backend URL is missing. Open Cloud → HTTPS backend URL, enter the deployed backend address, then tap Save connection settings." }
         val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 15000
@@ -74,7 +74,7 @@ object BackendApi {
 
     suspend fun fetchExpenses(idToken: String, householdId: String): JSONObject = withContext(Dispatchers.IO) {
         val root = baseUrl.trimEnd('/')
-        require(root.startsWith("https://")) { "Backend HTTPS URL has not been configured." }
+        require(root.startsWith("https://")) { "Backend URL is missing. Open Cloud → HTTPS backend URL, enter the deployed backend address, then tap Save connection settings." }
         val connection = (URL(root + "/v1/expenses/sync?householdId=" + java.net.URLEncoder.encode(householdId, "UTF-8")).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 15000
@@ -92,7 +92,7 @@ object BackendApi {
     private suspend fun request(method: String, path: String, idToken: String, body: JSONObject): JSONObject =
         withContext(Dispatchers.IO) {
             val root = baseUrl.trimEnd('/')
-            require(root.startsWith("https://")) { "Backend HTTPS URL has not been configured." }
+            require(root.startsWith("https://")) { "Backend URL is missing. Open Cloud → HTTPS backend URL, enter the deployed backend address, then tap Save connection settings." }
             val connection = (URL(root + path).openConnection() as HttpURLConnection).apply {
                 requestMethod = method
                 connectTimeout = 15000
