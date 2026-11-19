@@ -49,11 +49,17 @@ import java.util.UUID
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Cloud & live shopping", style = MaterialTheme.typography.headlineSmall)
         Text("Firebase sign-in, secure expense sync, and Rewalto price checks using free credits only. No paid fallback is permitted.")
-        OutlinedTextField(value=url,onValueChange={url=it},label={Text("HTTPS backend URL")},singleLine=true,modifier=Modifier.fillMaxWidth())
+        OutlinedTextField(value=url,onValueChange={url=it},label={Text("HTTPS backend URL")},supportingText={Text("Enter the deployed Cloudflare Worker URL from the backend deployment. Then save and test the connection.")},singleLine=true,modifier=Modifier.fillMaxWidth())
         OutlinedTextField(value=postalCode,onValueChange={postalCode=it},label={Text("Delivery PIN")},singleLine=true,modifier=Modifier.fillMaxWidth())
         Button(onClick={
-            prefs.edit().putString("backend_url",url.trim()).putString("postal_code",postalCode.trim()).apply()
-            BackendApi.baseUrl=url.trim(); message="Saved locally."
+            val cleanedUrl = url.trim().trimEnd('/')
+            if (!cleanedUrl.startsWith("https://")) {
+                message = "Enter the deployed backend HTTPS URL first. Offline features remain available without it."
+            } else {
+                prefs.edit().putString("backend_url",cleanedUrl).putString("postal_code",postalCode.trim()).apply()
+                BackendApi.baseUrl=cleanedUrl
+                message="Backend URL saved on this device. Tap Test Rewalto free sample to verify connectivity."
+            }
         }) { Text("Save connection settings") }
         Text("Signed in: ${signedIn ?: "No"}")
         val firebaseUser = FirebaseAuth.getInstance().currentUser
