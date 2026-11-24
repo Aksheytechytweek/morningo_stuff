@@ -1,0 +1,23 @@
+# Project-scoped Codex config. Loaded only after this repository is trusted.
+# Never put credentials or tokens in this file.
+
+[agents]
+max_concurrent_threads_per_session = 4
+
+[mcp_servers.github]
+url = "https://api.githubcopilot.com/mcp/"
+auth = "oauth"
+default_tools_approval_mode = "writes"
+
+[mcp_servers.cloudflare]
+url = "https://mcp.cloudflare.com/mcp"
+auth = "oauth"
+default_tools_approval_mode = "prompt"
+
+[mcp_servers.cloudflare_docs]
+url = "https://docs.mcp.cloudflare.com/mcp"
+default_tools_approval_mode = "auto"
+
+[mcp_servers.openai_developer_docs]
+url = "https://developers.openai.com/mcp"
+default_tools_approval_mode = "auto"
